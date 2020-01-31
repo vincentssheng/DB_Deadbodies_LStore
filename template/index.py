@@ -5,7 +5,6 @@ from template.table import Table
 # This data structure is usually a B-Tree
 """
 
-
 class Index:
 
     def __init__(self, table):

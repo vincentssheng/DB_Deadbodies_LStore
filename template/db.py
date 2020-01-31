@@ -30,7 +30,6 @@ class Database():
     """
     def drop_table(self, name):
         del self.tables[name] #remove table with name
-        pass
         
 
 

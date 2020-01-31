@@ -36,6 +36,7 @@ class Query:
 
     """
     # Update a record with specified key and columns
+    columns = [1, 2, none, none, 4]
     """
 
     def update(self, key, *columns):
