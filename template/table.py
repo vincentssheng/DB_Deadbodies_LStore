@@ -21,7 +21,14 @@ class Table:
         self.key = key
         self.num_columns = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
-        self.update_ranges = [] # update ranges
+
+        # triple list that holds the pages
+        # page_ranges[i][j][k] corresponds to
+        # ith page range
+        # jth set of pages in the ith page range
+        # kth column of jth set of pages
+        # the offset is the physical location of the record in this set of pages
+        self.page_ranges = [[[] for j in range(Config.NUM_SETS_PER_RANGE)] for i in range(Config.NUM_RANGES)]
         
 
     # __ means its internal to the class, never going to be used outside
