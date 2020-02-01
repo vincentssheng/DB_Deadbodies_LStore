@@ -9,10 +9,12 @@ class Config:
 
     # Constants in terms of number of records
     MAX_RID = pow(2,64) - 2 # maximum number of records stored
-    TAIL_TO_BASE_RATIO = 1 # sets of tail pages : sets of base pages
+    TAIL_FRACTION= 0.5 # fraction of tail pages
     NUM_SETS_PER_RANGE = 2 # number of sets of base pages / page range
     NUM_RECORDS_PER_SET = PAGE_SIZE / ENTRY_SIZE # number of records in each page range
-    NUM_RECORDS_PER_RANGE = NUM_SETS_PER_RANGE * NUM_RECORDS_PER_SET * (TAIL_TO_BASE_RATIO + 1) # number of records in each page range
+    NUM_RECORDS_PER_RANGE = NUM_SETS_PER_RANGE * NUM_RECORDS_PER_SET * (1/TAIL_FRACTION) # number of records in each page range
+    NUM_TAIL_PER_RANGE = NUM_RECORDS_PER_RANGE * TAIL_FRACTION
+    NUM_BASE_PER_RANGE = NUM_RECORDS_PER_RANGE - NUM_TAIL_PER_RANGE
     NUM_RANGES = MAX_RID / NUM_RECORDS_PER_RANGE # number of page ranges
     
     # Indices of columns containing metadata
