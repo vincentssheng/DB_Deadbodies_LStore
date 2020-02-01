@@ -20,7 +20,7 @@ class Table:
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.page_directory = {} # dictionary that maps rid to (page #, offset)
+        self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
         self.update_ranges = [] # update ranges
         
 
