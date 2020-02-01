@@ -30,6 +30,12 @@ class Table:
         # the offset is the physical location of the record in this set of pages
         self.page_ranges = [[[] for j in range(Config.NUM_SETS_PER_RANGE)] for i in range(Config.NUM_RANGES)]
         
+    def generate_tuple_indexes(self, RID):
+        range_number = RID / Config.NUM_RECORDS_PER_RANGE
+        set_number = (RID - (range_number * Config.NUM_RECORDS_PER_RANGE)) / Config.NUM_RECORDS_PER_SET
+        offset = (RID - (range_number * Config.NUM_RECORDS_PER_RANGE)) % Config.NUM_RECORDS_PER_SET
+
+        return (range_number, set_number, offset)
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
