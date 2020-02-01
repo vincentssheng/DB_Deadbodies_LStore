@@ -33,12 +33,12 @@ class Query:
     def insert(self, *columns):
         schema_encoding = '0' * self.table.num_columns
         self.table.assign_rid('insert') # get valid rid
-        (range_index, set_index, offset) = self.table.calculate_physical_location() # from VIV and JEN
+        record = Record(self.table.base_current_rid, self.table.key, columns)
+        (range_index, set_index, offset) = self.table.calculate_phys_location(record.rid)
         # store physical location in page directory
         self.table.page_directory.update({self.table.base_current_rid: (range_index, set_index, offset)}) 
         self.table.init_range(self.table.base_current_rid) # init range if necessary
         self.table.add_page(self.table.ranges[len(self.table.ranges)-1]) # add page if necessary
-        record = Record(self.table.base_current_rid, self.table.key, columns)
         self.write_to_page(range_index, set_index, offset, 0, schema_encoding, record) # writing to page
 
     """

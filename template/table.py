@@ -35,7 +35,6 @@ class Table:
         self.ranges.append([]) # add a new range
         self.add_page(self.ranges[0], 1) # add a new page
 
-
     # validate and assigns rid
     def assign_rid(self, method):
         if method == 'insert':
@@ -48,6 +47,14 @@ class Table:
                 self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
             else: # rid belongs to tp
                 self.base_current_rid += 1
+
+    # calculate physical location based on RID
+    def calculate_phys_location(self, rid):
+            range_number = rid / Config.NUM_RECORDS_PER_RANGE
+            set_number = (rid % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
+            offset = (rid % Config.NUM_RECORDS_PER_RANGE) % Config.NUM_RECORDS_PER_SET
+
+            return (range_number, set_number, offset)
 
     # initialize a page range
     def init_range(self, current_rid):
