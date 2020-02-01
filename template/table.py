@@ -32,8 +32,8 @@ class Table:
         
     def generate_tuple_indexes(self, RID):
         range_number = RID / Config.NUM_RECORDS_PER_RANGE
-        set_number = (RID - (range_number * Config.NUM_RECORDS_PER_RANGE)) / Config.NUM_RECORDS_PER_SET
-        offset = (RID - (range_number * Config.NUM_RECORDS_PER_RANGE)) % Config.NUM_RECORDS_PER_SET
+        set_number = (RID % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
+        offset = (RID % Config.NUM_RECORDS_PER_RANGE) % Config.NUM_RECORDS_PER_SET
 
         return (range_number, set_number, offset)
 
