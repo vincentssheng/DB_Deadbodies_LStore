@@ -1,4 +1,5 @@
 from template.config import *
+import sys
 
 class Page:
 
@@ -11,11 +12,11 @@ class Page:
             return True
         return False
 
-    def write(self, value):
+    def write(self, offset, value):
         self.num_records += 1
-        # write value to page?
-        pass
+        byte_value = value.to_bytes(Config.ENTRY_SIZE, sys.byteorder)
+        self.data[offset*Config.ENTRY_SIZE : ((offset+1)*Config.ENTRY_SIZE-1)] = byte_value
 
-    def read(offset):
+    def read(self, offset):
         pass
 

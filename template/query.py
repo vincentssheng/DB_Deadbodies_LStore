@@ -1,6 +1,6 @@
 from template.table import Table, Record
 from template.index import Index
-
+from template.config import *
 
 class Query:
     """
@@ -19,13 +19,27 @@ class Query:
     def delete(self, key):
         pass
 
+    def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
+        self.table.ranges[i][j][0].write(offset, indirection) # indirection 0 for base records
+        self.table.ranges[i][j][1].write(offset, record.rid) # rid column
+        self.table.ranges[i][j][2].write(offset, Config.TODO_VALUE_TIMESTAMP) # timestamp
+        self.table.ranges[i][j][3].write(offset, schema_encoding) # schema encoding
+        for k in range(record.columns.count):
+            self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k])
+
     """
     # Insert a record with specified columns
     """
-
     def insert(self, *columns):
         schema_encoding = '0' * self.table.num_columns
-        pass
+        self.table.assign_rid('insert') # get valid rid
+        (range_index, set_index, offset) = self.table.calculate_physical_location() # from VIV and JEN
+        # store physical location in page directory
+        self.table.page_directory.update({self.table.base_current_rid: (range_index, set_index, offset)}) 
+        self.table.init_range(self.table.base_current_rid) # init range if necessary
+        self.table.add_page(self.table.ranges[len(self.table.ranges)-1]) # add page if necessary
+        record = Record(self.table.base_current_rid, self.table.key, columns)
+        self.write_to_page(range_index, set_index, offset, 0, schema_encoding, record) # writing to page
 
     """
     # Read a record with specified key
@@ -52,4 +66,4 @@ class Query:
         pass
 
 
-    
+

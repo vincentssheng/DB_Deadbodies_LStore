@@ -30,15 +30,11 @@ class Table:
         # jth set of pages in the ith page range
         # kth column of jth set of pages
         # the offset is the physical location of the record in this set of pages
-        self.page_ranges = []
+        self.ranges = []
+        # start with one range and page
+        self.ranges.append([]) # add a new range
+        self.add_page(self.ranges[0], 1) # add a new page
 
-    def init_range(self):
-        self.page_ranges.append([])
-        self.page_ranges[self.page_ranges.len()-1].append([])
-
-    def init_page(self):
-        # initialize NUM_META_COLS + num_columns pages
-        self.page_ranges.append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
 
     # validate and assigns rid
     def assign_rid(self, method):
@@ -52,6 +48,18 @@ class Table:
                 self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
             else: # rid belongs to tp
                 self.base_current_rid += 1
+
+    # initialize a page range
+    def init_range(self, current_rid):
+        # new range
+        if (current_rid-1) / Config.NUM_RECORDS_PER_RANGE >= len(self.ranges):
+            self.ranges.append([]) # add a new range
+            
+            
+    # create a new set of pages
+    def add_page(self, range, current_rid):
+        if current_rid % Config.NUM_RECORDS_PER_SET == 1:
+            range.append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)]) # initialize NUM_META_COLS + num_columns pages
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
