@@ -73,7 +73,7 @@ class Query:
                 if(query_columns[i] == 0):
                     continue
                 # read from the corresponding pages according to query_columns
-                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i].read(offset),sys.byteorder))
+                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
         else:
             # read from latest tp
             # use page directory to get physical location of latest tp
@@ -83,7 +83,7 @@ class Query:
                 if(query_columns[i] == 0):
                     continue
                 # read from the corresponding pages according to query_columns
-                record_info.append(self.table.ranges[range_index][set_index][i].read(offset).int_from_bytes(sys.byteorder))
+                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
 
         return record_info
 
