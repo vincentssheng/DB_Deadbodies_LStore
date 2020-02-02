@@ -11,11 +11,10 @@ class Page:
             return True
         return False
 
-    def write(self, value):
+    def write(self, offset, value):
         self.num_records += 1
-        # write value to page?
-        pass
+        self.data[offset*Config.ENTRY_SIZE : ((offset+1)*Config.ENTRY_SIZE-1)] = value
 
-    def read(offset):
+    def read(self, offset):
         pass
 
