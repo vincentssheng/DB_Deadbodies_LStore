@@ -51,7 +51,36 @@ class Query:
     """
 
     def select(self, key, query_columns):
-        pass
+        # need to make sure key is available
+        if key not in self.table.key_directory.keys():
+            # error, cannot find a key that does NOT exist
+            pass
+
+        # find base record physical location
+        (range_index, set_index, offset) = self.table.key_directory[key]
+
+        # get RID of latest tail record if available
+        prev_indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        record_info = []
+        if prev_indirection == 0:
+            # read bp
+            for i in range(len(query_columns)):
+                if(query_columns[i] == 0):
+                    continue
+                # read from the corresponding pages according to query_columns
+                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i].read(offset),sys.byteorder))
+        else:
+            # read from latest tp
+            # use page directory to get physical location of latest tp
+            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
+
+            for i in range(len(query_columns)):
+                if(query_columns[i] == 0):
+                    continue
+                # read from the corresponding pages according to query_columns
+                record_info.append(self.table.ranges[range_index][set_index][i].read(offset).int_from_bytes(sys.byteorder))
+
+        return record_info
 
     """
     # Update a record with specified key and columns
