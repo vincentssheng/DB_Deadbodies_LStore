@@ -18,8 +18,13 @@ class Query:
     # Read a record with specified RID
     """
 
-    def delete(self, key):
-        pass
+    def delete(self, key): # invalidate RID of base record and all tail records
+        (range_index, set_index, offset) = self.table.key_directory[key] #get location of base record
+        indirect_rid = 1
+        while indirect_rid != 0:
+            self.table.ranges[range_index][set_index][Config.RID_COLUMN] = Config.INVALID_RID #invalidate RID
+            indirect_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder) #get RID of next tail record
+            (range_index, set_index, offset) = self.table.calculate_phys_location(indirect_rid) #get location of next tail record
 
     def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
         self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
