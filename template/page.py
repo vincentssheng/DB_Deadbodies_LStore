@@ -2,8 +2,8 @@ from template.config import *
 
 class Page:
 
+    num_records = 0
     def __init__(self):
-        self.num_records = 0
         self.data = bytearray(Config.PAGE_SIZE)
 
     def has_capacity(self):
@@ -13,8 +13,8 @@ class Page:
 
     def write(self, offset, value):
         self.num_records += 1
-        self.data[offset*Config.ENTRY_SIZE : ((offset+1)*Config.ENTRY_SIZE-1)] = value
+        self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE-1)] = value
 
     def read(self, offset):
-        pass
+        return self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE-1)]
 

@@ -22,10 +22,10 @@ class Query:
         pass
 
     def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
-        self.table.ranges[i][j][0].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
-        self.table.ranges[i][j][1].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
-        self.table.ranges[i][j][2].write(offset, Config.TODO_VALUE_TIMESTAMP.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
-        self.table.ranges[i][j][3].write(offset, bytearray(schema_encoding, "utf8")) # schema encoding
+        self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
+        self.table.ranges[i][j][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
+        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, Config.TODO_VALUE_TIMESTAMP.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
+        self.table.ranges[i][j][Config.SCHEMA_ENCODING_COLUMN].write(offset, bytearray(schema_encoding, "utf8")) # schema encoding
         for k in range(self.table.num_columns):
             self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
@@ -39,11 +39,12 @@ class Query:
         (range_index, set_index, offset) = self.table.calculate_phys_location(record.rid)
         # store physical location in page directory
         self.table.page_directory.update({record.rid: (range_index, set_index, offset)}) 
+        self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
         if (record.rid-1) / Config.NUM_RECORDS_PER_RANGE >= len(self.table.ranges):
             self.table.ranges.append([])
         if offset == 0:
             self.table.ranges[range_index].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-        self.write_to_page(range_index, set_index, offset, 0, schema_encoding, record) # writing to page
+        self.write_to_page(range_index, set_index, offset, Config.INVALID_RID, schema_encoding, record) # writing to page
 
     """
     # Read a record with specified key
@@ -58,7 +59,34 @@ class Query:
     """
 
     def update(self, key, *columns):
-        pass
+        self.table.assign_rid('update')
+        record = Record(self.table.tail_current_rid, self.table.key, columns)
+        (range_index, set_index, offset) = self.table.key_directory[key]
+
+        # generate schema encoding
+        schema_encoding = ""
+        for i in range(columns):
+            if(columns[i] == "none"):
+                schema_encoding += '0'
+            schema_encoding += '1'
+
+        # calculate offset and allocate new page if necessary
+        if self.table.ranges[range_index][set_index][0].has_capacity:
+            tail_offset = self.table.ranges[range_index][set_index][0].num_records * Config.ENTRY_SIZE
+        else:
+            tail_offset = 0
+            self.table.ranges[range_index].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
+
+        self.table.page_directory.update({record.rid: (range_index, set_index, tail_offset)})
+
+        # read previous tail record rid
+        prev_indirection = self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset).int_from_bytes(sys.byteorder)
+        
+        # write indirection to base page
+        self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].write(offset, self.table.tail_current_rid)
+
+        # write tail record
+        self.write_to_page(range_index, set_index, offset, prev_indirection, schema_encoding, record)
 
     """
     :param start_range: int         # Start of the key range to aggregate 

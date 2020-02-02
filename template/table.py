@@ -24,6 +24,7 @@ class Table:
         self.key = key
         self.num_columns = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
+        self.key_directory = {} # dictionary that maps key to (range #, page_set #, offset)
 
         # triple list that holds the pages
         # page_ranges[i][j][k] corresponds to
