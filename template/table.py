@@ -11,8 +11,9 @@ class Record:
 class Table:
 
     # static variable
-    base_current_rid = 1 
-    tail_current_rid = 1 + Config.NUM_SETS_PER_RANGE * Config.NUM_RECORDS_PER_SET
+    base_current_rid = 0 
+    tail_current_rid = 0 + Config.NUM_SETS_PER_RANGE * Config.NUM_RECORDS_PER_SET
+    ranges = []
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
@@ -30,10 +31,9 @@ class Table:
         # jth set of pages in the ith page range
         # kth column of jth set of pages
         # the offset is the physical location of the record in this set of pages
-        self.ranges = []
         # start with one range and page
-        self.ranges.append([]) # add a new range
-        self.add_page(self.ranges[0], 1) # add a new page
+        self.ranges.append([])
+        self.ranges[0].append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
 
     # validate and assigns rid
     def assign_rid(self, method):
@@ -51,22 +51,9 @@ class Table:
     # calculate physical location based on RID
     def calculate_phys_location(self, rid):
             range_number = rid / Config.NUM_RECORDS_PER_RANGE
-            set_number = (rid % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
-            offset = (rid % Config.NUM_RECORDS_PER_RANGE) % Config.NUM_RECORDS_PER_SET
-
-            return (range_number, set_number, offset)
-
-    # initialize a page range
-    def init_range(self, current_rid):
-        # new range
-        if (current_rid-1) / Config.NUM_RECORDS_PER_RANGE >= len(self.ranges):
-            self.ranges.append([]) # add a new range
-            
-            
-    # create a new set of pages
-    def add_page(self, range, current_rid):
-        if current_rid % Config.NUM_RECORDS_PER_SET == 1:
-            range.append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)]) # initialize NUM_META_COLS + num_columns pages
+            set_number = ((rid - 1) % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
+            offset = (rid - 1) % Config.NUM_RECORDS_PER_SET
+            return (int(range_number), int(set_number), int(offset))
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
