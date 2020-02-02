@@ -18,6 +18,7 @@ insert_time_1 = process_time()
 
 print("Inserting 10k records took:  \t\t\t", insert_time_1 - insert_time_0)
 
+"""
 # Measuring update Performance
 update_cols = [
     [randrange(0, 100), None, None, None, None],
@@ -32,9 +33,18 @@ for i in range(0, 10000):
     query.update(choice(keys), *(choice(update_cols)))
 update_time_1 = process_time()
 print("Updating 10k records took:  \t\t\t", update_time_1 - update_time_0)
+"""
 
 # Measuring Select Performance
 select_time_0 = process_time()
+
+# TESTING CODE TO MAKE SURE READ WORKS
+# query.insert(123456789, 100, 90, 75, 80)
+# keys.append(123456789)
+# print(query.select(123456789, [1, 0, 1, 0, 1]))
+# print(query.select(906659671, [1, 1, 1, 1, 1]))
+# should print [906659671, 93, 0, 0, 0]
+
 for i in range(0, 10000):
     query.select(choice(keys), [1, 1, 1, 1, 1])
 select_time_1 = process_time()
