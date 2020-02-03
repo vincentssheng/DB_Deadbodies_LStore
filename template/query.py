@@ -130,10 +130,6 @@ class Query:
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
 
-<<<<<<< Updated upstream
-    def sum(self, start_range, end_range, aggregate_column_index):
-        pass
-=======
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
         prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
@@ -180,8 +176,51 @@ class Query:
         # need to make sure key is available
         if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
             # error, cannot find a key that does NOT exist
-            pass
->>>>>>> Stashed changes
+            return 0
+
+        
+        # calculate phys loc for start & end keys through key directory
+        # find base record physical location
+        (curr_range, curr_set, curr_offset) = self.table.key_directory[start_range]
+        (e_range_index, e_set_index, e_offset) = self.table.key_directory[end_range]
+        
+        # check to make sure start < end 
+        if (curr_offset > e_offset):
+            temp = e_offset
+            curr_offset - e_offset
+            e_offset = temp
+
+        # print(curr_range, curr_set, curr_offset)
+        # print(e_range_index, e_set_index, e_offset)
+
+        # compare offset to create range -> start with smallest, end with largest
+        # wait for TA confirmation (switched indices case?)
+        # read start value
+        sum = self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+
+        while (curr_offset != e_offset or curr_range != e_range_index or curr_set != e_set_index):
+            curr_offset += 1
+
+            # check boundaries
+            # check for moving out of bounds of set #
+            if (curr_offset > Config.NUM_RECORDS_PER_SET):
+                curr_set += 1
+                curr_offset = 0
+            # check for moving out of bounds of page range
+            if (curr_set > Config.NUM_SETS_PER_RANGE):
+                curr_range += 1
+                curr_set = 0
+                curr_offset = 0
+            
+            #print(self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index))
+            # sum value
+            sum += self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+            
+        return sum
+        
+
+
+
 
 
 
