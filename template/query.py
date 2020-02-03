@@ -68,10 +68,6 @@ class Query:
         indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
         base_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
 
-        print("B======================================D")
-        print("Base RID: " + str(base_rid))
-        print("Base Indirection: " + str(indirection))
-
         # remove key and rid from dictionaries
         del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
@@ -81,7 +77,6 @@ class Query:
 
         # Track down tail records associated to the base record that is deleted
         while indirection > 0:
-            print("Indirection: " + str(indirection))
             # Find next indirection
             (next_range, next_set, next_offset) = self.table.page_directory[indirection]
 
@@ -105,7 +100,6 @@ class Query:
         self.table.assign_rid('insert') # get valid rid
         record = Record(self.table.base_current_rid, self.table.key, columns)
         (range_index, set_index, offset) = self.table.calculate_phys_location(record.rid)
-        print("RID: " + str(record.rid))
 
         # store physical location in page directory
         self.table.page_directory.update({record.rid: (range_index, set_index, offset)}) 
