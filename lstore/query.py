@@ -168,6 +168,7 @@ class Query:
     """
 
     def update(self, key, *columns):
+
         # find RID for tail record
         self.table.assign_rid('update')
         record = Record(self.table.tail_current_rid, self.table.key, columns)
@@ -183,8 +184,8 @@ class Query:
 
         # calculate offset and allocate new page if necessary
         if self.table.tail_tracker[base_range] > 0: # if there is already a tail page
-            if self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].has_capacity: # if latest tail page has space
-                tail_offset = self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].num_records * Config.ENTRY_SIZE
+            if self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].has_capacity(): # if latest tail page has space
+                tail_offset = self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].num_records
             else:
                 tail_offset = 0
                 self.table.ranges[base_range].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
