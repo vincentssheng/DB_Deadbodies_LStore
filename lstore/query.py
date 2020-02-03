@@ -1,7 +1,7 @@
-from template.table import Table, Record
-from template.index import Index
-from template.config import *
-from template.page import *
+from lstore.table import Table, Record
+from lstore.index import Index
+from lstore.config import *
+from lstore.page import *
 import sys
 import struct
 
