@@ -27,6 +27,7 @@ update_cols = [
     [None, None, None, None, randrange(0, 100)],
 ]
 
+
 update_time_0 = process_time()
 for i in range(0, 10000):
     query.update(choice(keys), *(choice(update_cols)))
