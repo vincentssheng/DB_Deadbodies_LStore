@@ -145,7 +145,7 @@ class Query:
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist
-            return 0
+            return None
 
         # find base record physical location
         (range_index, set_index, offset) = self.table.key_directory[key]
@@ -157,8 +157,9 @@ class Query:
                 record_info.append(self.get_latest_val(range_index, set_index, offset, i))
             else:
                 record_info.append('None')
-
-        return [record_info]
+        
+        rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+        return [Record(rid, key, tuple(record_info))]
 
     """
     # Update a record with specified key and columns

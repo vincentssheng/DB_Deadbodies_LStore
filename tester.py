@@ -32,7 +32,7 @@ for key in records:
     if error:
         print('select error on', key , ':', record, ', correct:', records[key])
     else:
-        print('select on', key, ':', record)
+        print('select on', key, ':', record.columns)
 
 for key in records:
     updated_columns = [None, None, None, None, None]
