@@ -102,37 +102,42 @@ class Query:
     # @param: key - specified key to select record
     # @param: query_columns - columns to return in result
     """
+
+    def get_latest_val(self, page_range, set_num, offset, column_index):
+        # checking if base page has been updated
+        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        # CHECK IF RECORD EXISTS (MILESTONE 2)
+        rid = int.from_bytes(self.table.ranges[page_range][set_num][Config.RID_COLUMN].read(offset), sys.byteorder)
+        
+        if rid == 0 :
+            # record does NOT exist, add nothing
+            return 0
+        
+        if prev_indirection == 0:
+            # read bp
+            return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+        else:
+            # read the tail record
+            # use page directory to get physical location of latest tp
+            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
+            return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+
+
     def select(self, key, query_columns):
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist
-            pass
+            return 0
 
         # find base record physical location
         (range_index, set_index, offset) = self.table.key_directory[key]
 
-        # get RID of latest tail record if available
-        prev_indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
         record_info = []
-        if prev_indirection == 0:
-            # read bp
-            for i in range(len(query_columns)):
-                if(query_columns[i] == 0):
-                    continue
-                # read from the corresponding pages according to query_columns
-                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
-        else:
-            # read from latest tp
-            # use page directory to get physical location of latest tp
-            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
 
-            for i in range(len(query_columns)):
-                if(query_columns[i] == 0):
-                    continue
-                # read from the corresponding pages according to query_columns
-                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
+        for i in range(len(query_columns)):
+            record_info.append(self.get_latest_val(range_index, set_index, offset, i))
 
-        return record_info
+        return [record_info]
 
     """
     # Update a record with specified key and columns
@@ -211,25 +216,6 @@ class Query:
     :param end_range: int           # End of the key range to aggregate 
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
-
-    def get_latest_val(self, page_range, set_num, offset, column_index):
-        # checking if base page has been updated
-        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
-        # CHECK IF RECORD EXISTS (MILESTONE 2)
-        rid = int.from_bytes(self.table.ranges[page_range][set_num][Config.RID_COLUMN].read(offset), sys.byteorder)
-        if rid != 0 :
-            if prev_indirection == 0:
-                # bp
-                return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
-            else:
-                # read the tail record
-                # use page directory to get physical location of latest tp
-                (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
-                return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
-        else:
-            # if record does NOT exist, add nothing
-            return 0
-
     def sum(self, start_range, end_range, aggregate_column_index):
         """
         # start_range and end_range are keys, so we can use select to get their value in the column
@@ -260,7 +246,6 @@ class Query:
             # error, cannot find a key that does NOT exist
             return 0
 
-        
         # calculate phys loc for start & end keys through key directory
         # find base record physical location
         (curr_range, curr_set, curr_offset) = self.table.key_directory[start_range]
