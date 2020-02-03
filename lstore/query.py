@@ -1,7 +1,7 @@
-from template.table import Table, Record
-from template.index import Index
-from template.config import *
-from template.page import *
+from lstore.table import Table, Record
+from lstore.index import Index
+from lstore.config import *
+from lstore.page import *
 import sys
 import struct
 
@@ -120,37 +120,45 @@ class Query:
     # @param: key - specified key to select record
     # @param: query_columns - columns to return in result
     """
+
+    def get_latest_val(self, page_range, set_num, offset, column_index):
+        # checking if base page has been updated
+        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        # CHECK IF RECORD EXISTS (MILESTONE 2)
+        rid = int.from_bytes(self.table.ranges[page_range][set_num][Config.RID_COLUMN].read(offset), sys.byteorder)
+        
+        if rid == 0 :
+            # record does NOT exist, add nothing
+            return 0
+        
+        if prev_indirection == 0:
+            # read bp
+            return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+        else:
+            # read the tail record
+            # use page directory to get physical location of latest tp
+            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
+            return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+
+
     def select(self, key, query_columns):
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist
-            pass
+            return 0
 
         # find base record physical location
         (range_index, set_index, offset) = self.table.key_directory[key]
 
-        # get RID of latest tail record if available
-        prev_indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
         record_info = []
-        if prev_indirection == 0:
-            # read bp
-            for i in range(len(query_columns)):
-                if(query_columns[i] == 0):
-                    continue
-                # read from the corresponding pages according to query_columns
-                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
-        else:
-            # read from latest tp
-            # use page directory to get physical location of latest tp
-            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
 
-            for i in range(len(query_columns)):
-                if(query_columns[i] == 0):
-                    continue
-                # read from the corresponding pages according to query_columns
-                record_info.append(int.from_bytes(self.table.ranges[range_index][set_index][i + Config.NUM_META_COLS].read(offset),sys.byteorder))
+        for i in range(len(query_columns)):
+            if query_columns[i] == 1:
+                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
+            else:
+                record_info.append('None')
 
-        return record_info
+        return [record_info]
 
     """
     # Update a record with specified key and columns
@@ -229,9 +237,54 @@ class Query:
     :param end_range: int           # End of the key range to aggregate 
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
-
     def sum(self, start_range, end_range, aggregate_column_index):
-        pass
+        # need to make sure key is available
+        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
+            # error, cannot find a key that does NOT exist
+            return 0
+
+        # calculate phys loc for start & end keys through key directory
+        # find base record physical location
+        (curr_range, curr_set, curr_offset) = self.table.key_directory[start_range]
+        (e_range_index, e_set_index, e_offset) = self.table.key_directory[end_range]
+        
+        # check to make sure start < end 
+        if (curr_offset > e_offset):
+            temp = e_offset
+            curr_offset - e_offset
+            e_offset = temp
+
+        # print(curr_range, curr_set, curr_offset)
+        # print(e_range_index, e_set_index, e_offset)
+
+        # compare offset to create range -> start with smallest, end with largest
+        # wait for TA confirmation (switched indices case?)
+        # read start value
+        sum = self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+
+        while (curr_offset != e_offset or curr_range != e_range_index or curr_set != e_set_index):
+            curr_offset += 1
+
+            # check boundaries
+            # check for moving out of bounds of set #
+            if (curr_offset > Config.NUM_RECORDS_PER_SET):
+                curr_set += 1
+                curr_offset = 0
+            # check for moving out of bounds of page range
+            if (curr_set > Config.NUM_SETS_PER_RANGE):
+                curr_range += 1
+                curr_set = 0
+                curr_offset = 0
+            
+            #print(self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index))
+            # sum value
+            sum += self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+            
+        return sum
+        
+
+
+
 
 
 

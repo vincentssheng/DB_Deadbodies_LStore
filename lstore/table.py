@@ -1,5 +1,5 @@
-from template.index import Index
-from template.page import *
+from lstore.index import Index
+from lstore.page import *
 from time import time
 
 class Record:
