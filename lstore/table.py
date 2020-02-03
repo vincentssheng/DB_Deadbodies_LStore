@@ -48,11 +48,12 @@ class Table:
             else: # rid belongs to tp
                 self.base_current_rid += Config.NUM_TAIL_PER_RANGE + 1
         else: # method == 'update'
-            if ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) <= Config.NUM_BASE_PER_RANGE: # rid belongs to bp
-                self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
-            else: # rid belongs to tp
-                self.tail_current_rid += 1
 
+            if ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) > Config.NUM_BASE_PER_RANGE or ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) == 0: # rid belongs to tp
+                self.tail_current_rid += 1
+            else: # rid belongs to bp
+                self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
+                
     # calculate physical location based on RID
     def calculate_phys_location(self, rid):
         range_number = rid / Config.NUM_RECORDS_PER_RANGE

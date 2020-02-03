@@ -62,12 +62,30 @@ class Query:
     # @param: key - specified primary key
     """
     def delete(self, key): # invalidate RID of base record and all tail records
-        (range_index, set_index, offset) = self.table.key_directory[key] #get location of base record
-        indirect_rid = 1
-        while indirect_rid != 0:
-            self.table.ranges[range_index][set_index][Config.RID_COLUMN] = Config.INVALID_RID #invalidate RID
-            indirect_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder) #get RID of next tail record
-            (range_index, set_index, offset) = self.table.calculate_phys_location(indirect_rid) #get location of next tail record
+
+        # Get location in read info from base record
+        (range_index, set_index, offset) = self.table.key_directory[key]
+        indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        base_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+
+        # remove key and rid from dictionaries
+        del self.table.key_directory[key]
+        del self.table.page_directory[base_rid]
+
+        # delete base record
+        self.table.ranges[range_index][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        # Track down tail records associated to the base record that is deleted
+        while indirection > 0:
+            # Find next indirection
+            (next_range, next_set, next_offset) = self.table.page_directory[indirection]
+
+            # delete from page directory
+            del self.table.page_directory[indirection]
+            indirection = int.from_bytes(self.table.ranges[next_range][next_set][Config.INDIRECTION_COLUMN].read(next_offset), sys.byteorder)
+
+            # invalidate record
+            self.table.ranges[range_index][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
     """
     # Insert into a database
