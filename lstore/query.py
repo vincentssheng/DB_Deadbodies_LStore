@@ -241,7 +241,7 @@ class Query:
     """
     def sum(self, start_range, end_range, aggregate_column_index):
         # need to make sure key is available
-        if (start_range not in self.table.key_directory.keys()):
+        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
             # error, cannot find a key that does NOT exist
             return 0
 
