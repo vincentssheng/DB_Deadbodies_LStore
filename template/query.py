@@ -123,8 +123,85 @@ class Query:
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
 
-    def sum(self, start_range, end_range, aggregate_column_index):
-        pass
+    def get_latest_val(self, page_range, set_num, offset, column_index):
+        # checking if base page has been updated
+        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        if prev_indirection == 0:
+            # bp
+            return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+        else:
+            # read the tail record
+            # use page directory to get physical location of latest tp
+            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
+            return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
 
+    def sum(self, start_range, end_range, aggregate_column_index):
+        """
+        # start_range and end_range are keys, so we can use select to get their value in the column
+        # create query_columns for select
+        query_columns = []
+        for i in range(self.table.num_columns):
+            if (i == aggregate_column_index - 1):
+                query_columns.append(1)
+                continue
+            query_columns.append(0)
+        
+        # base case
+        if (start_range == end_range):
+            return ((self.select(self, start_range, query_columns))[0])
+        
+
+        # if start_range and end_range are keys in column other than aggregate_column_index, get correct key
+        start_list = self.select(self, start_range, query_columns))
+        # end_list = self.select(self, end_range, query_columns)
+        # select returns a list, but we only chose one column -> result = [val]
+        start_value = start_list[0]
+        # end_value = end_list[0]
+        """
+
+        # need to make sure key is available
+        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
+            # error, cannot find a key that does NOT exist
+            pass
+
+        # calculate phys loc for start & end keys through key directory
+        # find base record physical location
+        (curr_range, curr_set, curr_offset) = self.table.key_directory[start_range]
+        (e_range_index, e_set_index, e_offset) = self.table.key_directory[end_range]
+        
+        # check to make sure start < end 
+        if (curr_offset > e_offset):
+            temp = e_offset
+            curr_offset - e_offset
+            e_offset = temp
+
+        print(curr_range, curr_set, curr_offset)
+        print(e_range_index, e_set_index, e_offset)
+
+        # compare offset to create range -> start with smallest, end with largest
+        # wait for TA confirmation (switched indices case?)
+        # read start value
+        sum = self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+
+        while (curr_offset != e_offset or curr_range != e_range_index or curr_set != e_set_index):
+            curr_offset += 1
+
+            # check boundaries
+            # check for moving out of bounds of set #
+            if (curr_offset > Config.NUM_RECORDS_PER_SET):
+                curr_set += 1
+                curr_offset = 0
+            # check for moving out of bounds of page range
+            if (curr_set > Config.NUM_SETS_PER_RANGE):
+                curr_range += 1
+                curr_set = 0
+                curr_offset = 0
+            
+            #print(self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index))
+            # sum value
+            sum += self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
+            
+        return sum
+        
 
 
