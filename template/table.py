@@ -1,3 +1,4 @@
+from template.index import Index
 from template.page import *
 from time import time
 
@@ -25,6 +26,7 @@ class Table:
         self.num_columns = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
         self.key_directory = {} # dictionary that maps key to (range #, page_set #, offset)
+        self.index = Index(self)
 
         # triple list that holds the pages
         # page_ranges[i][j][k] corresponds to
