@@ -4,6 +4,8 @@ from lstore.config import *
 from lstore.page import *
 import sys
 import struct
+import time
+from datetime import datetime
 
 class Query:
 
@@ -52,7 +54,7 @@ class Query:
     def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
         self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
         self.table.ranges[i][j][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
-        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, Config.TODO_VALUE_TIMESTAMP.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
+        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
         self.table.ranges[i][j][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
         for k in range(self.table.num_columns):
             self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
