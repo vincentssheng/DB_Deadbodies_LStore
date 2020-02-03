@@ -15,6 +15,7 @@ class Table:
     base_current_rid = 0 
     tail_current_rid = 0 + Config.NUM_SETS_PER_RANGE * Config.NUM_RECORDS_PER_SET
     ranges = []
+    tail_tracker = []
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
@@ -36,6 +37,7 @@ class Table:
         # the offset is the physical location of the record in this set of pages
         # start with one range and page
         self.ranges.append([])
+        self.tail_tracker.append(0)
         self.ranges[0].append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
 
     # validate and assigns rid
@@ -46,17 +48,17 @@ class Table:
             else: # rid belongs to tp
                 self.base_current_rid += Config.NUM_TAIL_PER_RANGE + 1
         else: # method == 'update'
-            if ((self.base_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) <= Config.NUM_BASE_PER_RANGE: # rid belongs to bp
+            if ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) <= Config.NUM_BASE_PER_RANGE: # rid belongs to bp
                 self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
             else: # rid belongs to tp
-                self.base_current_rid += 1
+                self.tail_current_rid += 1
 
     # calculate physical location based on RID
     def calculate_phys_location(self, rid):
-            range_number = rid / Config.NUM_RECORDS_PER_RANGE
-            set_number = ((rid - 1) % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
-            offset = (rid - 1) % Config.NUM_RECORDS_PER_SET
-            return (int(range_number), int(set_number), int(offset))
+        range_number = rid / Config.NUM_RECORDS_PER_RANGE
+        set_number = ((rid - 1) % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
+        offset = (rid - 1) % Config.NUM_RECORDS_PER_SET
+        return (int(range_number), int(set_number), int(offset))
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):

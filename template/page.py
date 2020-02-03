@@ -1,4 +1,5 @@
 from template.config import *
+import sys
 
 class Page:
 
@@ -13,8 +14,8 @@ class Page:
 
     def write(self, offset, value):
         self.num_records += 1
-        self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE-1)] = value
+        self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE)] = value
 
     def read(self, offset):
-        return self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE-1)]
+        return self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE)]
 
