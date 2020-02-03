@@ -246,17 +246,24 @@ class Query:
 
         # calculate phys loc for start & end keys through key directory
         # find base record physical location
-        (curr_range, curr_set, curr_offset) = self.table.key_directory[start_range]
+        (s_range_index, s_set_index, s_offset) = self.table.key_directory[start_range]
         (e_range_index, e_set_index, e_offset) = self.table.key_directory[end_range]
+
         
         # check to make sure start < end 
-        if (curr_offset > e_offset):
-            temp = e_offset
-            curr_offset - e_offset
-            e_offset = temp
+        curr_range = s_range_index
+        curr_set = s_set_index
+        curr_offset = s_offset
 
-        # print(curr_range, curr_set, curr_offset)
-        # print(e_range_index, e_set_index, e_offset)
+        if ((s_range_index > e_range_index) 
+            or (s_range_index == e_range_index and s_set_index > e_set_index) 
+            or (s_set_index == e_set_index and s_offset > e_offset)):
+            curr_range = e_range_index
+            e_range_index = s_range_index
+            curr_set = e_set_index
+            e_set_index = s_set_index
+            curr_offset = e_offset
+            e_offset = s_offset
 
         # compare offset to create range -> start with smallest, end with largest
         # wait for TA confirmation (switched indices case?)
@@ -268,15 +275,19 @@ class Query:
 
             # check boundaries
             # check for moving out of bounds of set #
-            if (curr_offset > Config.NUM_RECORDS_PER_SET):
+            if (curr_offset == Config.NUM_BASE_PER_RANGE / Config.NUM_SETS_PER_RANGE):
                 curr_set += 1
                 curr_offset = 0
             # check for moving out of bounds of page range
-            if (curr_set > Config.NUM_SETS_PER_RANGE):
+            if (curr_set == Config.NUM_SETS_PER_RANGE):
                 curr_range += 1
                 curr_set = 0
                 curr_offset = 0
-            
+            # check for if accessing nonexistant page range
+            if (curr_range == Config.NUM_RANGES):
+                print("Out of bounds")
+                break
+
             #print(self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index))
             # sum value
             sum += self.get_latest_val(curr_range, curr_set, curr_offset, aggregate_column_index)
