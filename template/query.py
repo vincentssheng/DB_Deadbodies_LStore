@@ -6,16 +6,19 @@ import sys
 import struct
 
 class Query:
+
     """
     # Creates a Query object that can perform different queries on the specified table 
+    # @param: table - table to create a query on
     """
     def __init__(self, table):
         self.table = table
         pass
-
+   
     """
-    # internal Method
-    # Read a record with specified RID
+    # Conversion of schema encoding to integer
+    # @param: schema - schema encoding (string)
+    # RETURN: schema encoding (int)
     """
     def schema_to_int(self, schema):
         int_value = 0
@@ -23,6 +26,11 @@ class Query:
             int_value += int(schema[i]) * pow(2, self.table.num_columns-1-i)
         return int_value
 
+    """
+    # Conversion of integer to schema encoding
+    # @param: schema - schema encoding (int)
+    # RETURN: schema encoding (string)
+    """
     def int_to_schema(self, value):
         lst = []
         for i in range(self.table.num_columns):
@@ -32,6 +40,27 @@ class Query:
         schema = ''.join(str(e) for e in reversed_list)
         return schema
 
+    """
+    # Write columns to page
+    # @param: i - index of range
+    # @param: j - index of set
+    # @param: offset - offset from start of page
+    # @indirection: indirection column
+    # @schema_encoding: schema_encoding
+    # @record: record to be inserted
+    """
+    def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
+        self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
+        self.table.ranges[i][j][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
+        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, Config.TODO_VALUE_TIMESTAMP.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
+        self.table.ranges[i][j][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
+        for k in range(self.table.num_columns):
+            self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+    """
+    # Delete record with the specified key
+    # @param: key - specified primary key
+    """
     def delete(self, key): # invalidate RID of base record and all tail records
         (range_index, set_index, offset) = self.table.key_directory[key] #get location of base record
         indirect_rid = 1
@@ -40,18 +69,11 @@ class Query:
             indirect_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder) #get RID of next tail record
             (range_index, set_index, offset) = self.table.calculate_phys_location(indirect_rid) #get location of next tail record
 
-    def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
-        self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
-        #print("IND WRITTEN: " + str(int.from_bytes(self.table.ranges[i][j][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)))
-        self.table.ranges[i][j][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
-        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, Config.TODO_VALUE_TIMESTAMP.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
-        self.table.ranges[i][j][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
-        for k in range(self.table.num_columns):
-            self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-
+    """
+    # Insert into a database
+    # @param: *columns - columns to be written
     """
     # Insert a record with specified columns
-    """
     def insert(self, *columns):
 
         # generate schema encoding
@@ -76,11 +98,10 @@ class Query:
         self.write_to_page(range_index, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record) # writing to page
 
     """
-    # Read a record with specified key
-    # :param key: the key value to select records based on
-    # :param query_columns: what columns to return. array of 1 or 0 values.
+    # Select records from database
+    # @param: key - specified key to select record
+    # @param: query_columns - columns to return in result
     """
-
     def select(self, key, query_columns):
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
@@ -115,7 +136,8 @@ class Query:
 
     """
     # Update a record with specified key and columns
-    columns = [1, 2, none, none, 4]
+    # @param: key - specified key that corresponds to a record which we want to update
+    # @param: *columns - in the form of [1, 2, none, none, 4]
     """
 
     def update(self, key, *columns):
