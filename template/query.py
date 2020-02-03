@@ -217,30 +217,6 @@ class Query:
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        """
-        # start_range and end_range are keys, so we can use select to get their value in the column
-        # create query_columns for select
-        query_columns = []
-        for i in range(self.table.num_columns):
-            if (i == aggregate_column_index - 1):
-                query_columns.append(1)
-                continue
-            query_columns.append(0)
-        
-        # base case
-        if (start_range == end_range):
-            return ((self.select(self, start_range, query_columns))[0])
-        
-
-        # if start_range and end_range are keys in column other than aggregate_column_index, get correct key
-        start_list = self.select(self, start_range, query_columns))
-        # end_list = self.select(self, end_range, query_columns)
-        # select returns a list, but we only chose one column -> result = [val]
-        start_value = start_list[0]
-        # end_value = end_list[0]
-        """
-
-
         # need to make sure key is available
         if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
             # error, cannot find a key that does NOT exist

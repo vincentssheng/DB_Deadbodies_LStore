@@ -37,12 +37,6 @@ print("Updating 10k records took:  \t\t\t", update_time_1 - update_time_0)
 # Measuring Select Performance
 select_time_0 = process_time()
 
-# TESTING CODE TO MAKE SURE READ WORKS
-# query.insert(123456789, 100, 90, 75, 80)
-# keys.append(123456789)
-# print(query.select(123456789, [1, 0, 1, 0, 1])[0])
-# print(query.select(906659671, [1, 1, 1, 1, 1])[0])
-
 for i in range(0, 10000):
     query.select(choice(keys), [1, 1, 1, 1, 1])
 select_time_1 = process_time()
@@ -50,17 +44,6 @@ print("Selecting 10k records took:  \t\t\t", select_time_1 - select_time_0)
 
 
 # Measuring Aggregate Performance
-
-# TESTING CODE TO MAKE SURE READ WORKS
-# query.insert(123456789, 100, 90, 75, 80)
-# keys.append(123456789)
-# query.insert(135792468, 50, 60, 70, 50)
-# keys.append(135792468)
-# query.insert(246813579, 25, 30, 65, 20)
-# keys.append(246813579)
-# print(query.sum(123456789, 246813579, 1))  # 175
-# print(query.sum(123456789, 135792468, 4))  # 130
-
 agg_time_0 = process_time()
 for i in range(0, 10000, 100):
     result = query.sum(i, 100, randrange(0, 5))
