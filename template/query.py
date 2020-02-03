@@ -135,7 +135,10 @@ class Query:
         record_info = []
 
         for i in range(len(query_columns)):
-            record_info.append(self.get_latest_val(range_index, set_index, offset, i))
+            if query_columns[i] == 1:
+                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
+            else:
+                record_info.append('None')
 
         return [record_info]
 
