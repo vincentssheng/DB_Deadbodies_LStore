@@ -128,8 +128,58 @@ class Query:
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
 
+<<<<<<< Updated upstream
     def sum(self, start_range, end_range, aggregate_column_index):
         pass
+=======
+    def get_latest_val(self, page_range, set_num, offset, column_index):
+        # checking if base page has been updated
+        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        # CHECK IF RECORD EXISTS (MILESTONE 2)
+        rid = int.from_bytes(self.table.ranges[page_range][set_num][Config.RID_COLUMN].read(offset), sys.byteorder)
+        if rid != 0 :
+            if prev_indirection == 0:
+                # bp
+                return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+            else:
+                # read the tail record
+                # use page directory to get physical location of latest tp
+                (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
+                return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+        else:
+            # if record does NOT exist, add nothing
+            return 0
+
+    def sum(self, start_range, end_range, aggregate_column_index):
+        """
+        # start_range and end_range are keys, so we can use select to get their value in the column
+        # create query_columns for select
+        query_columns = []
+        for i in range(self.table.num_columns):
+            if (i == aggregate_column_index - 1):
+                query_columns.append(1)
+                continue
+            query_columns.append(0)
+        
+        # base case
+        if (start_range == end_range):
+            return ((self.select(self, start_range, query_columns))[0])
+        
+
+        # if start_range and end_range are keys in column other than aggregate_column_index, get correct key
+        start_list = self.select(self, start_range, query_columns))
+        # end_list = self.select(self, end_range, query_columns)
+        # select returns a list, but we only chose one column -> result = [val]
+        start_value = start_list[0]
+        # end_value = end_list[0]
+        """
+
+
+        # need to make sure key is available
+        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
+            # error, cannot find a key that does NOT exist
+            pass
+>>>>>>> Stashed changes
 
 
 
