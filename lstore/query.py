@@ -45,19 +45,20 @@ class Query:
     """
     # Write columns to page
     # @param: i - index of range
-    # @param: j - index of set
+    # @param: j - tail or base
+    # @param: k - set index
     # @param: offset - offset from start of page
     # @indirection: indirection column
     # @schema_encoding: schema_encoding
     # @record: record to be inserted
     """
-    def write_to_page(self, i, j, offset, indirection, schema_encoding, record):
-        self.table.ranges[i][j][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
-        self.table.ranges[i][j][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
-        self.table.ranges[i][j][Config.TIMESTAMP_COLUMN].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
-        self.table.ranges[i][j][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
-        for k in range(self.table.num_columns):
-            self.table.ranges[i][j][k+Config.NUM_META_COLS].write(offset, record.columns[k].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+    def write_to_page(self, i, j, k, offset, indirection, schema_encoding, record):
+        self.table.ranges[i][j][k][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
+        self.table.ranges[i][j][k][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
+        self.table.ranges[i][j][k][Config.TIMESTAMP_COLUMN].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
+        self.table.ranges[i][j][k][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
+        for a in range(self.table.num_columns):
+            self.table.ranges[i][j][k][a+Config.NUM_META_COLS].write(offset, record.columns[a].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
     """
     # Delete record with the specified key
@@ -67,27 +68,27 @@ class Query:
 
         # Get location in read info from base record
         (range_index, set_index, offset) = self.table.key_directory[key]
-        indirection = int.from_bytes(self.table.ranges[range_index][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
-        base_rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+        indirection = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        base_rid = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
         del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
 
         # delete base record
-        self.table.ranges[range_index][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # Track down tail records associated to the base record that is deleted
         while indirection > 0:
             # Find next indirection
-            (next_range, next_set, next_offset) = self.table.page_directory[indirection]
+            (next_range, tail, next_set, next_offset) = self.table.page_directory[indirection]
 
             # delete from page directory
             del self.table.page_directory[indirection]
-            indirection = int.from_bytes(self.table.ranges[next_range][next_set][Config.INDIRECTION_COLUMN].read(next_offset), sys.byteorder)
+            indirection = int.from_bytes(self.table.ranges[next_range][tail][next_set][Config.INDIRECTION_COLUMN].read(next_offset), sys.byteorder)
 
             # invalidate record
-            self.table.ranges[range_index][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
+            self.table.ranges[range_index][tail][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
     """
     # Insert into a database
@@ -101,21 +102,21 @@ class Query:
 
         self.table.assign_rid('insert') # get valid rid
         record = Record(self.table.base_current_rid, self.table.key, columns)
-        (range_index, set_index, offset) = self.table.calculate_phys_location(record.rid)
+        (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
         # store physical location in page directory
-        self.table.page_directory.update({record.rid: (range_index, set_index, offset)}) 
+        self.table.page_directory.update({record.rid: (range_index, base, set_index, offset)}) 
         self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
 
         # Create new range?
-        if (record.rid-1) / Config.NUM_RECORDS_PER_RANGE >= len(self.table.ranges):
-            self.table.tail_tracker.append(False)
+        if (record.rid-1) / Config.NUM_BASE_RECORDS_PER_RANGE >= len(self.table.ranges):
+            self.table.tail_tracker.append(-1)
             self.table.ranges.append([])
 
         # Create new page?
         if offset == 0:
-            self.table.ranges[range_index].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-        self.write_to_page(range_index, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record) # writing to page
+            self.table.ranges[range_index][base].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
+        self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record) # writing to page
 
     """
     # Select records from database
@@ -125,22 +126,17 @@ class Query:
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
-        prev_indirection = int.from_bytes(self.table.ranges[page_range][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
+        prev_indirection = int.from_bytes(self.table.ranges[page_range][0][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
         # CHECK IF RECORD EXISTS (MILESTONE 2)
-        rid = int.from_bytes(self.table.ranges[page_range][set_num][Config.RID_COLUMN].read(offset), sys.byteorder)
-        
-        if rid == 0 :
-            # record does NOT exist, add nothing
-            return 0
-        
+
         if prev_indirection == 0:
             # read bp
-            return int.from_bytes(self.table.ranges[page_range][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+            return int.from_bytes(self.table.ranges[page_range][0][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
         else:
             # read the tail record
             # use page directory to get physical location of latest tp
-            (range_index, set_index, offset) = self.table.page_directory[prev_indirection]
-            return int.from_bytes(self.table.ranges[range_index][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+            (range_index, tail, set_index, offset) = self.table.page_directory[prev_indirection]
+            return int.from_bytes(self.table.ranges[range_index][tail][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
 
 
     def select(self, key, query_columns):
@@ -160,7 +156,9 @@ class Query:
             else:
                 record_info.append('None')
         
-        rid = int.from_bytes(self.table.ranges[range_index][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+        rid = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+        #print("rid: " + str(rid))
+        #print("info: " + str(tuple(record_info)))
         return [Record(rid, key, tuple(record_info))]
 
     """
@@ -185,44 +183,46 @@ class Query:
                 new_schema += '1'
 
         # calculate offset and allocate new page if necessary
-        if self.table.tail_tracker[base_range] > 0: # if there is already a tail page
-            if self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].has_capacity(): # if latest tail page has space
-                tail_offset = self.table.ranges[base_range][self.table.tail_tracker[base_range]][0].num_records
+        if self.table.tail_tracker[base_range] > -1: # if there is already a tail page
+            if self.table.ranges[base_range][1][self.table.tail_tracker[base_range]][0].has_capacity(): # if latest tail page has space
+                tail_offset = self.table.ranges[base_range][1][self.table.tail_tracker[base_range]][0].num_records
             else:
                 tail_offset = 0
-                self.table.ranges[base_range].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-                self.table.tail_tracker[base_range] = len(self.table.ranges[base_range]) - 1
+                self.table.ranges[base_range][1].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
+                self.table.tail_tracker[base_range] += 1
         else:
+            self.table.ranges[base_range].append([])
             tail_offset = 0
-            self.table.ranges[base_range].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-            self.table.tail_tracker[base_range] = len(self.table.ranges[base_range]) - 1
+            self.table.ranges[base_range][1].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
+            self.table.tail_tracker[base_range] += 1
 
-        self.table.page_directory.update({record.rid: (base_range, self.table.tail_tracker[base_range], tail_offset)})
+        self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
 
         # read previous tail record rid
-        prev_indirection = int.from_bytes(self.table.ranges[base_range][base_set][Config.INDIRECTION_COLUMN].read(base_offset), sys.byteorder)
+        prev_indirection = int.from_bytes(self.table.ranges[base_range][0][base_set][Config.INDIRECTION_COLUMN].read(base_offset), sys.byteorder)
         non_updated_values = []
         if prev_indirection != 0: # if base record has been updated at least once
-            (prev_range, prev_set, prev_offset) = self.table.page_directory[prev_indirection]  
+            (prev_range, prev_tail, prev_set, prev_offset) = self.table.page_directory[prev_indirection]  
         else: # if base record has not been updated
             prev_range = base_range
+            prev_tail = 0
             prev_set = base_set
             prev_offset = base_offset
         for i in range(self.table.num_columns):
             if new_schema[i] == '0':
-                value = int.from_bytes(self.table.ranges[prev_range][prev_set][Config.NUM_META_COLS+i].read(prev_offset), sys.byteorder)
+                value = int.from_bytes(self.table.ranges[prev_range][prev_tail][prev_set][Config.NUM_META_COLS+i].read(prev_offset), sys.byteorder)
                 non_updated_values.append(value)
         
         # write indirection to base page and update base record schema encoding
-        self.table.ranges[base_range][base_set][Config.INDIRECTION_COLUMN].write(base_offset, self.table.tail_current_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-        base_schema = self.int_to_schema(int.from_bytes(self.table.ranges[base_range][base_set][Config.SCHEMA_ENCODING_COLUMN].read(base_offset), sys.byteorder))
+        self.table.ranges[base_range][0][base_set][Config.INDIRECTION_COLUMN].write(base_offset, self.table.tail_current_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        base_schema = self.int_to_schema(int.from_bytes(self.table.ranges[base_range][0][base_set][Config.SCHEMA_ENCODING_COLUMN].read(base_offset), sys.byteorder))
         result_schema = ""
         for i in range(self.table.num_columns):
             if base_schema[i] == '1' or new_schema[i] == '1':
                 result_schema += '1'
             else:
                 result_schema += '0'
-        self.table.ranges[base_range][base_set][Config.SCHEMA_ENCODING_COLUMN].write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        self.table.ranges[base_range][0][base_set][Config.SCHEMA_ENCODING_COLUMN].write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # write tail record
         count = 0
@@ -234,7 +234,7 @@ class Query:
             else:
                 new_columns.append(columns[i])
         record.columns = tuple(new_columns)
-        self.write_to_page(base_range, self.table.tail_tracker[base_range], tail_offset, prev_indirection, self.schema_to_int(new_schema), record)
+        self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, prev_indirection, self.schema_to_int(new_schema), record)
 
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -263,10 +263,3 @@ class Query:
             sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
 
         return sum
-        
-
-
-
-
-
-

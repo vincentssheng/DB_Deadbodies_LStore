@@ -8,14 +8,11 @@ class Config:
     ENTRY_SIZE = 8 # size of entry in KB corresponding to one column of a record 2^3 KB
 
     # Constants in terms of number of records
-    MAX_RID = pow(2,63) # maximum number of records stored
-    TAIL_FRACTION= 0.5 # fraction of tail pages
-    NUM_SETS_PER_RANGE = 2 # number of sets of base pages / page range
+    MAX_RID = pow(2,64) - 1 # maximum number of records stored
+    NUM_BASE_SETS_PER_RANGE = 2 # number of sets of base pages / page range
     NUM_RECORDS_PER_SET = int(PAGE_SIZE / ENTRY_SIZE) # number of records in each page range
-    NUM_RECORDS_PER_RANGE = int(NUM_SETS_PER_RANGE * NUM_RECORDS_PER_SET * (1/TAIL_FRACTION)) # number of records in each page range
-    NUM_TAIL_PER_RANGE = int(NUM_RECORDS_PER_RANGE * TAIL_FRACTION)
-    NUM_BASE_PER_RANGE = int(NUM_RECORDS_PER_RANGE - NUM_TAIL_PER_RANGE)
-    NUM_RANGES = int(MAX_RID / NUM_RECORDS_PER_RANGE) # number of page ranges
+    NUM_BASE_RECORDS_PER_RANGE =  NUM_BASE_SETS_PER_RANGE * NUM_RECORDS_PER_SET # number of records in each page range
+    NUM_RANGES = int(MAX_RID / NUM_BASE_RECORDS_PER_RANGE) # number of page ranges
     
     # Indices of columns containing metadata
     INDIRECTION_COLUMN = 0

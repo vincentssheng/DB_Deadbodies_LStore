@@ -13,9 +13,9 @@ class Table:
 
     # static variable
     base_current_rid = 0 
-    tail_current_rid = 0 + Config.NUM_SETS_PER_RANGE * Config.NUM_RECORDS_PER_SET
+    tail_current_rid = Config.MAX_RID
+    tail_tracker = [] # tracks the latest tail set ID for each range
     ranges = []
-    tail_tracker = []
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
@@ -37,29 +37,30 @@ class Table:
         # the offset is the physical location of the record in this set of pages
         # start with one range and page
         self.ranges.append([])
-        self.tail_tracker.append(0)
-        self.ranges[0].append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
+        self.ranges[0].append([])
+        self.ranges[0][0].append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
+        self.tail_tracker.append(-1)
 
     # validate and assigns rid
     def assign_rid(self, method):
         if method == 'insert':
-            if ((self.base_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) <= Config.NUM_BASE_PER_RANGE: # rid belongs to bp
+            if self.base_current_rid + 1 < self.tail_current_rid:
                 self.base_current_rid += 1
-            else: # rid belongs to tp
-                self.base_current_rid += Config.NUM_TAIL_PER_RANGE + 1
+            else:
+                print("Maximum capacity reached, cannot insert.")
         else: # method == 'update'
-
-            if ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) > Config.NUM_BASE_PER_RANGE or ((self.tail_current_rid + 1) % Config.NUM_RECORDS_PER_RANGE) == 0: # rid belongs to tp
-                self.tail_current_rid += 1
-            else: # rid belongs to bp
-                self.tail_current_rid += Config.NUM_BASE_PER_RANGE + 1
+            if self.tail_current_rid - 1 > self.base_current_rid:
+                self.tail_current_rid -= 1
+            else:
+                print("Maximum capacity reached, cannot update.")
                 
     # calculate physical location based on RID
-    def calculate_phys_location(self, rid):
-        range_number = rid / Config.NUM_RECORDS_PER_RANGE
-        set_number = ((rid - 1) % Config.NUM_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
+    def calculate_base_location(self, rid):
+        range_number = (rid - 1) / Config.NUM_BASE_RECORDS_PER_RANGE
+        set_number = ((rid - 1) % Config.NUM_BASE_RECORDS_PER_RANGE) / Config.NUM_RECORDS_PER_SET
         offset = (rid - 1) % Config.NUM_RECORDS_PER_SET
-        return (int(range_number), int(set_number), int(offset))
+
+        return (int(range_number), 0, int(set_number), int(offset))
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
