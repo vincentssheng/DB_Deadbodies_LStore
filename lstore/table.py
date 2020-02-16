@@ -1,6 +1,8 @@
 from lstore.index import Index
 from lstore.page import *
 from time import time
+from collections import defaultdict
+import os
 
 class Record:
 
@@ -9,13 +11,61 @@ class Record:
         self.key = key
         self.columns = columns
 
+class Bufferpool:
+
+    def __init__(self):
+        self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
+        self.used = []
+        self.pool = []
+        self.directory = defaultdict(lambda: -1)
+    
+    def retrieve(self, path):
+       
+        file = open(path, "r")
+        data_str = file.readlines().split()
+        data = [int(i) for i in data_str]
+        page = Page(path)
+        for i in range(len(data)):
+            page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        page.dirty = False
+        empty_index = self.empty.pop()
+        self.used.append(empty_index)
+        self.pool[empty_index] = page
+
+        return empty_index
+
+    def evict(self):
+        evict_index = self.used.pop()
+        self.empty.push(evict_index)
+
+        if self.pool[evict_index].dirty:
+            file = open(self.pool[evict_index].path)
+            data_str = ""
+            for i in range(self.pool[evict_index].num_records):
+                data_str += str(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder)) + " "
+
+            file.write(data_str)
+
+    def find_index(self, table, range, bt, set, page):
+        i = self.directory[(range, bt, set, page)]
+
+        if i == -1:
+            if len(self.pool) == Config.POOL_MAX_LEN:
+                self.evict()
+            
+            path = os.getcwd() + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
+            i = self.retrieve(path)
+        
+        return i
+
+
 class Table:
 
     # static variable
     base_current_rid = 0 
     tail_current_rid = Config.MAX_RID
     tail_tracker = [] # tracks the latest tail set ID for each range
-    ranges = []
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
@@ -32,14 +82,11 @@ class Table:
         # triple list that holds the pages
         # page_ranges[i][j][k] corresponds to
         # ith page range
-        # jth set of pages in the ith page range
+        # kth set of pages in the ith page range
         # kth column of jth set of pages
         # the offset is the physical location of the record in this set of pages
         # start with one range and page
-        self.ranges.append([])
-        self.ranges[0].append([])
-        self.ranges[0][0].append([Page() for i in range(self.num_columns+Config.NUM_META_COLS)])
-        self.tail_tracker.append(-1)
+        os.mkdir(name)
 
     # validate and assigns rid
     def assign_rid(self, method):

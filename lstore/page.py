@@ -3,9 +3,11 @@ import sys
 
 class Page:
 
-    num_records = 0
-    def __init__(self):
+    def __init__(self, path):
         self.data = bytearray(Config.PAGE_SIZE)
+        self.path = path
+        self.num_records = 0
+        self.dirty = False
 
     def has_capacity(self):
         if self.num_records < Config.NUM_RECORDS_PER_SET:
@@ -13,6 +15,7 @@ class Page:
         return False
 
     def write(self, offset, value):
+        self.dirty = True
         self.num_records += 1
         self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE)] = value
 

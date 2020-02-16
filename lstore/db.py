@@ -1,4 +1,5 @@
 from lstore.table import Table
+import os
 
 class Database():
 
@@ -9,7 +10,9 @@ class Database():
         pass
 
     def open(self, path):
-        pass
+        if not os.path.exists(path):
+            os.mkdir(path)
+        os.chdir(path)
 
     def close(self):
         pass
