@@ -56,11 +56,11 @@ class Bufferpool:
         return empty_index
 
     def evict(self):
-        evict_index = self.used.pop()
+        evict_index = self.used.pop(0)
         self.empty.append(evict_index)
 
         if self.pool[evict_index].dirty:
-            file = open(self.pool[evict_index].path, "w+")
+            file = open(self.pool[evict_index].path, "w")
             data_str = ""
             for i in range(self.pool[evict_index].num_records):
                 #print(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder))
@@ -70,7 +70,6 @@ class Bufferpool:
             file.close()
 
     def find_index(self, table, range, bt, set, page):
-        #print(self.empty)
         i = self.directory[(table, range, bt, set, page)]
 
         if i == -1:
