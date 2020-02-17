@@ -8,6 +8,7 @@ from colorama import Fore, Back, Style
 # Student Id and 4 grades
 Config()
 db = Database()
+db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/data")
 grades_table = db.create_table('Grades', 5, 0)
 query = Query(grades_table)
 
@@ -23,7 +24,7 @@ for i in range(0, 1000):
     query.insert(*records[key])
     print('inserted', records[key])
 
-
+"""
 for key in records:
     record = query.select(key, [1, 1, 1, 1, 1])[0]
     error = False
@@ -65,7 +66,7 @@ for c in range(0, grades_table.num_columns):
             print('sum error on [', keys[r[0]], ',', keys[r[1]], ']: ', result, ', correct: ', column_sum)
         else:
             print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
-
-
+"""
+db.close()
 
 

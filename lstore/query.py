@@ -2,9 +2,7 @@ from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.config import *
 from lstore.page import *
-import sys
-import struct
-import time
+import sys, struct, time, os
 from datetime import datetime
 
 class Query:
@@ -24,8 +22,8 @@ class Query:
     """
     def schema_to_int(self, schema):
         int_value = 0
-        for i in range(self.table.num_columns):
-            int_value += int(schema[i]) * pow(2, self.table.num_columns-1-i)
+        for i in range(self.table.num_cols):
+            int_value += int(schema[i]) * pow(2, self.table.num_cols-1-i)
         return int_value
 
     """
@@ -35,7 +33,7 @@ class Query:
     """
     def int_to_schema(self, value):
         lst = []
-        for i in range(self.table.num_columns):
+        for i in range(self.table.num_cols):
             lst.append(value%2)
             value /= 2
         reversed_list = [int(e) for e in reversed(lst)]
@@ -52,18 +50,31 @@ class Query:
     # @schema_encoding: schema_encoding
     # @record: record to be inserted
     """
-    def write_to_page(self, i, j, k, offset, indirection, schema_encoding, record):
-        self.table.ranges[i][j][k][Config.INDIRECTION_COLUMN].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # indirection 0 for base records
-        self.table.ranges[i][j][k][Config.RID_COLUMN].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # rid column
-        self.table.ranges[i][j][k][Config.TIMESTAMP_COLUMN].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # timestamp
-        self.table.ranges[i][j][k][Config.SCHEMA_ENCODING_COLUMN].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) # schema encoding
-        for a in range(self.table.num_columns):
-            self.table.ranges[i][j][k][a+Config.NUM_META_COLS].write(offset, record.columns[a].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+    def write_to_page(self, range, bt, set, offset, indirection, schema_encoding, record):
 
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.INDIRECTION_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.RID_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.TIMESTAMP_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.SCHEMA_ENCODING_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        j = 0
+        while j < self.table.num_cols:
+            index = self.table.bufferpool.find_index(self.table.name, range, bt, set, j+Config.NUM_META_COLS)
+            self.table.bufferpool.pool[index].write(offset, record.columns[j].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+            #print(self.table.bufferpool.pool[index].path)
+            j += 1
+            
     """
     # Delete record with the specified key
     # @param: key - specified primary key
-    """
+    
     def delete(self, key): # invalidate RID of base record and all tail records
 
         # Get location in read info from base record
@@ -90,7 +101,7 @@ class Query:
             # invalidate record
             self.table.ranges[range_index][tail][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
-    """
+    
     # Insert into a database
     # @param: *columns - columns to be written
     """
@@ -98,31 +109,47 @@ class Query:
     def insert(self, *columns):
 
         # generate schema encoding
-        schema_encoding = '0' * self.table.num_columns
+        schema_encoding = '0' * self.table.num_cols
 
         self.table.assign_rid('insert') # get valid rid
         record = Record(self.table.base_current_rid, self.table.key, columns)
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
         # store physical location in page directory
-        self.table.page_directory.update({record.rid: (range_index, base, set_index, offset)}) 
+        self.table.page_directory.update({record.rid: (range_index, 0, set_index, offset)}) 
         self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
 
         # Create new range?
-        if (record.rid-1) / Config.NUM_BASE_RECORDS_PER_RANGE >= len(self.table.ranges):
+        if range_index > self.table.latest_range_index:
             self.table.tail_tracker.append(-1)
-            self.table.ranges.append([])
+            self.table.latest_range_index += 1
+            path = os.getcwd() + "/" + self.table.name + "/r_" + str(range_index) + "/0"
+            if not os.path.exists(path):
+                os.makedirs(path)
 
         # Create new page?
         if offset == 0:
-            self.table.ranges[range_index][base].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
+            path = os.getcwd() + "/" + self.table.name + "/r_" + str(range_index) + "/0/s_" + str(set_index)
+            if not os.path.exists(path):
+                os.makedirs(path)
+            for i in range(self.table.num_cols+Config.NUM_META_COLS):
+                file = open(path + "/p_" + str(i) + ".txt", "w+")
+                file.close()
+
+            pages = [Page(path+"/p_"+str(i)+".txt") for i in range(self.table.num_cols+Config.NUM_META_COLS)]
+
+            for i in range(len(pages)):
+                print(pages[i].path)
+                index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, i)
+                self.table.bufferpool.pool[index] = pages[i]
+
         self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record) # writing to page
 
     """
     # Select records from database
     # @param: key - specified key to select record
     # @param: query_columns - columns to return in result
-    """
+    
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
@@ -236,11 +263,11 @@ class Query:
         record.columns = tuple(new_columns)
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, prev_indirection, self.schema_to_int(new_schema), record)
 
-    """
+    
     :param start_range: int         # Start of the key range to aggregate 
     :param end_range: int           # End of the key range to aggregate 
     :param aggregate_columns: int  # Index of desired column to aggregate
-    """
+    
     def sum(self, start_range, end_range, aggregate_column_index):
         # need to make sure key is available
         if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
@@ -263,3 +290,4 @@ class Query:
             sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
 
         return sum
+        """

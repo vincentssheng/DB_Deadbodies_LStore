@@ -11,11 +11,12 @@ class Database():
 
     def open(self, path):
         if not os.path.exists(path):
-            os.mkdir(path)
+            os.makedirs(path)
         os.chdir(path)
 
     def close(self):
-        pass
+        for table_name, table in self.tables.items():
+            table.bufferpool.flush_pool()
 
     """
     # Creates a new table

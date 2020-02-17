@@ -6,7 +6,6 @@ class Index:
 
     def __init__(self, table):
         # One index for each table. All our empty initially.
-        self.indices = [None] *  table.num_columns
         pass
 
     """

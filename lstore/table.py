@@ -13,20 +13,40 @@ class Record:
 
 class Bufferpool:
 
-    def __init__(self):
+    def __init__(self, table):
+        self.table = table
         self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
         self.used = []
-        self.pool = []
+        self.pool = [Page("") for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
         self.directory = defaultdict(lambda: -1)
+
+    def flush_pool(self):
+        for page in self.pool:
+            if page.dirty:
+                file = open(page.path, "w")
+                print(page.path)
+                data_str = ""
+                for i in range(page.num_records):
+                    #print(int.from_bytes(page.read(i), sys.byteorder))
+                    data_str += str(int.from_bytes(page.read(i), sys.byteorder)) + " "
+
+                file.write(data_str)
+                file.close()
     
     def retrieve(self, path):
        
-        file = open(path, "r")
-        data_str = file.readlines().split()
-        data = [int(i) for i in data_str]
-        page = Page(path)
-        for i in range(len(data)):
-            page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        # if file not empty
+        if os.stat(path).st_size > 0:
+            file = open(path, "r")
+            data_str = file.readlines()
+            data_lst = data_str[0].split() # we always store a line
+            file.close()
+            data = [int(i) for i in data_lst]
+            page = Page(path)
+            for i in range(len(data)):
+                page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        else:
+            page = Page(path)
 
         page.dirty = False
         empty_index = self.empty.pop()
@@ -37,28 +57,31 @@ class Bufferpool:
 
     def evict(self):
         evict_index = self.used.pop()
-        self.empty.push(evict_index)
+        self.empty.append(evict_index)
 
         if self.pool[evict_index].dirty:
-            file = open(self.pool[evict_index].path)
+            file = open(self.pool[evict_index].path, "w+")
             data_str = ""
             for i in range(self.pool[evict_index].num_records):
+                #print(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder))
                 data_str += str(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder)) + " "
 
             file.write(data_str)
+            file.close()
 
     def find_index(self, table, range, bt, set, page):
-        i = self.directory[(range, bt, set, page)]
+        #print(self.empty)
+        i = self.directory[(table, range, bt, set, page)]
 
         if i == -1:
-            if len(self.pool) == Config.POOL_MAX_LEN:
+            if len(self.empty) == 0:
                 self.evict()
             
-            path = os.getcwd() + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
+            path = os.getcwd() + "/" + self.table.name + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
             i = self.retrieve(path)
+            self.directory.update({(table, range, bt, set, page): i})
         
         return i
-
 
 class Table:
 
@@ -74,19 +97,14 @@ class Table:
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key
-        self.num_columns = num_columns
+        self.num_cols = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
         self.key_directory = {} # dictionary that maps key to (range #, page_set #, offset)
         self.index = Index(self)
-
-        # triple list that holds the pages
-        # page_ranges[i][j][k] corresponds to
-        # ith page range
-        # kth set of pages in the ith page range
-        # kth column of jth set of pages
-        # the offset is the physical location of the record in this set of pages
-        # start with one range and page
-        os.mkdir(name)
+        self.latest_range_index = -1
+        self.bufferpool = Bufferpool(self)
+        if not os.path.exists(os.getcwd() + "/" + name):
+            os.makedirs(name)
 
     # validate and assigns rid
     def assign_rid(self, method):
@@ -108,6 +126,19 @@ class Table:
         offset = (rid - 1) % Config.NUM_RECORDS_PER_SET
 
         return (int(range_number), 0, int(set_number), int(offset))
+
+    def create_range(self, range):
+        path = os.getcwd() + "/r_" + str(range) + "/" + str(0)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+    def create_sets(self, set, bt):
+        path = os.getcwd() + "/" + self.name + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        for i in range(Config.NUM_META_COLS+self.num_cols):
+            file = open(path + "/p_" + str(i) + ".txt", "w+")
+            file.close()
 
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
