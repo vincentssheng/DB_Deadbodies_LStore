@@ -3,6 +3,7 @@ from lstore.page import *
 from time import time
 from collections import defaultdict
 import os
+import pickle
 
 class Record:
 
@@ -102,6 +103,33 @@ class Table:
         self.bufferpool = Bufferpool(self)
         if not os.path.exists(os.getcwd() + "/" + name):
             os.makedirs(name)
+
+        pgdir_file = os.getcwd() + "/pgdir.txt"
+        file = open(pgdir_file, "w+")
+        file.close()
+        if os.stat(pgdir_file).st_size > 0:
+            with open(pgdir_file, "rb") as handle:
+                self.page_directory = pickle.loads(handle.read())
+            handle.close()
+        
+        keydir_file = os.getcwd() + "keydir.txt"
+        file = open(keydir_file, "w+")
+        file.close()
+        if os.stat(keydir_file).st_size > 0:
+            with open(keydir_file, "rb") as handle:
+                self.key_directory = pickle.loads(handle.read())
+            handle.close()
+
+    def unload_dirs(self):
+        pgdir_file = os.getcwd() + "/pgdir.txt"
+        with open(pgdir_file, "wb") as handle:
+            pickle.dump(self.page_directory, handle)
+        handle.close()
+
+        keydir_file = os.getcwd() + "/keydir.txt"
+        with open(keydir_file, "wb") as handle:
+            pickle.dump(self.key_directory, handle)
+        handle.close()
 
     # validate and assigns rid
     def assign_rid(self, method):

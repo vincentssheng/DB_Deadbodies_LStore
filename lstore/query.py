@@ -73,7 +73,7 @@ class Query:
             self.table.bufferpool.pool[index].write(offset, record.columns[j].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
             j += 1
             
-    """
+    
     # Delete record with the specified key
     # @param: key - specified primary key
     
@@ -81,29 +81,33 @@ class Query:
 
         # Get location in read info from base record
         (range_index, set_index, offset) = self.table.key_directory[key]
-        indirection = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
-        base_rid = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
+        ind_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
+        indirection = int.from_bytes(self.table.bufferpool.pool[ind_index].read(offset), sys.byteorder)
+        rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN) 
+        base_rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
         del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
 
         # delete base record
-        self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        self.table.bufferpool.pool[rid_index].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # Track down tail records associated to the base record that is deleted
         while indirection > 0:
             # Find next indirection
-            (next_range, tail, next_set, next_offset) = self.table.page_directory[indirection]
+            (next_range, _, next_set, next_offset) = self.table.page_directory[indirection]
 
             # delete from page directory
             del self.table.page_directory[indirection]
-            indirection = int.from_bytes(self.table.ranges[next_range][tail][next_set][Config.INDIRECTION_COLUMN].read(next_offset), sys.byteorder)
+            ind_index = self.table.bufferpool.find_index(self.table.name, next_range, 1, next_set, Config.INDIRECTION_COLUMN) 
+            indirection = int.from_bytes(self.table.bufferpool.pool[ind_index].read(next_offset), sys.byteorder)
 
             # invalidate record
-            self.table.ranges[range_index][tail][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
+            rid_index = self.table.bufferpool.find_index(self.table.name, next_range, 1, next_set, Config.RID_COLUMN) 
+            self.table.bufferpool.pool[rid_index].write(next_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
-     """
+     
 
     # Insert into a database
     # @param: *columns - columns to be written

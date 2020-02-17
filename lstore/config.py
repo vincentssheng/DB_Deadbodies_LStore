@@ -4,9 +4,9 @@
 class Config:
 
     # Constants in terms of memory
-    PAGE_SIZE = 1024 # size of one page 2^12 KB
+    PAGE_SIZE = 65536 # size of one page 2^12 KB
     ENTRY_SIZE = 8 # size of entry in KB corresponding to one column of a record 2^3 KB
-    POOL_MAX_LEN = 10 #
+    POOL_MAX_LEN = 10000 #
 
     # Constants in terms of number of records
     MAX_RID = pow(2,64) - 1 # maximum number of records stored

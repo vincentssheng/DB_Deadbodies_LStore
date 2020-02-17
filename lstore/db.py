@@ -14,9 +14,12 @@ class Database():
             os.makedirs(path)
         os.chdir(path)
 
+
     def close(self):
-        for table_name, table in self.tables.items():
+        for _, table in self.tables.items():
             table.bufferpool.flush_pool()
+            table.unload_dirs()
+
 
     """
     # Creates a new table
