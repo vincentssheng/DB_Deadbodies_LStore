@@ -4,7 +4,7 @@
 class Config:
 
     # Constants in terms of memory
-    PAGE_SIZE = 4096 # size of one page 2^12 KB
+    PAGE_SIZE = 1024 # size of one page 2^12 KB
     ENTRY_SIZE = 8 # size of entry in KB corresponding to one column of a record 2^3 KB
     POOL_MAX_LEN = 10 #
 
@@ -20,7 +20,8 @@ class Config:
     RID_COLUMN = 1
     TIMESTAMP_COLUMN = 2
     SCHEMA_ENCODING_COLUMN = 3
-    NUM_META_COLS = 4
+    BASE_RID_COLUMN = 4
+    NUM_META_COLS = 5
     INVALID_RID = 0
     BASE_INDEX = 0
     TAIL_INDEX = 1

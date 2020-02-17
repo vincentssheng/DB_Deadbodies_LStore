@@ -3,9 +3,10 @@ import sys
 
 class Page:
 
-    def __init__(self, path):
+    def __init__(self, path, location):
         self.data = bytearray(Config.PAGE_SIZE)
         self.path = path
+        self.location = location
         self.num_records = 0
         self.dirty = False
 

@@ -17,23 +17,21 @@ class Bufferpool:
         self.table = table
         self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
         self.used = []
-        self.pool = [Page("") for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
+        self.pool = [Page("", ()) for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
         self.directory = defaultdict(lambda: -1)
 
     def flush_pool(self):
         for page in self.pool:
             if page.dirty:
                 file = open(page.path, "w")
-                print(page.path)
                 data_str = ""
                 for i in range(page.num_records):
-                    #print(int.from_bytes(page.read(i), sys.byteorder))
                     data_str += str(int.from_bytes(page.read(i), sys.byteorder)) + " "
 
                 file.write(data_str)
                 file.close()
     
-    def retrieve(self, path):
+    def retrieve(self, path, location):
        
         # if file not empty
         if os.stat(path).st_size > 0:
@@ -42,11 +40,11 @@ class Bufferpool:
             data_lst = data_str[0].split() # we always store a line
             file.close()
             data = [int(i) for i in data_lst]
-            page = Page(path)
+            page = Page(path, location)
             for i in range(len(data)):
                 page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
         else:
-            page = Page(path)
+            page = Page(path, location)
 
         page.dirty = False
         empty_index = self.empty.pop()
@@ -63,11 +61,12 @@ class Bufferpool:
             file = open(self.pool[evict_index].path, "w")
             data_str = ""
             for i in range(self.pool[evict_index].num_records):
-                #print(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder))
                 data_str += str(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder)) + " "
 
             file.write(data_str)
             file.close()
+
+            del self.directory[self.pool[evict_index].location]
 
     def find_index(self, table, range, bt, set, page):
         i = self.directory[(table, range, bt, set, page)]
@@ -77,7 +76,7 @@ class Bufferpool:
                 self.evict()
             
             path = os.getcwd() + "/" + self.table.name + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
-            i = self.retrieve(path)
+            i = self.retrieve(path, (table, range, bt, set, page))
             self.directory.update({(table, range, bt, set, page): i})
         
         return i
@@ -96,7 +95,7 @@ class Table:
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key
-        self.num_cols = num_columns
+        self.num_columns = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
         self.key_directory = {} # dictionary that maps key to (range #, page_set #, offset)
         self.index = Index(self)
@@ -135,7 +134,7 @@ class Table:
         path = os.getcwd() + "/" + self.name + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set)
         if not os.path.exists(path):
             os.makedirs(path)
-        for i in range(Config.NUM_META_COLS+self.num_cols):
+        for i in range(Config.NUM_META_COLS+self.num_columns):
             file = open(path + "/p_" + str(i) + ".txt", "w+")
             file.close()
 

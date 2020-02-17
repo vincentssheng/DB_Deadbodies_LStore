@@ -24,7 +24,7 @@ for i in range(0, 1000):
     query.insert(*records[key])
     print('inserted', records[key])
 
-"""
+
 for key in records:
     record = query.select(key, [1, 1, 1, 1, 1])[0]
     error = False
@@ -36,7 +36,7 @@ for key in records:
     else:
         print('select on', key, ':', record.columns)
 
-
+"""
 for key in records:
     updated_columns = [None, None, None, None, None]
     for i in range(1, grades_table.num_columns):

@@ -22,8 +22,8 @@ class Query:
     """
     def schema_to_int(self, schema):
         int_value = 0
-        for i in range(self.table.num_cols):
-            int_value += int(schema[i]) * pow(2, self.table.num_cols-1-i)
+        for i in range(self.table.num_columns):
+            int_value += int(schema[i]) * pow(2, self.table.num_columns-1-i)
         return int_value
 
     """
@@ -33,7 +33,7 @@ class Query:
     """
     def int_to_schema(self, value):
         lst = []
-        for i in range(self.table.num_cols):
+        for i in range(self.table.num_columns):
             lst.append(value%2)
             value /= 2
         reversed_list = [int(e) for e in reversed(lst)]
@@ -50,7 +50,7 @@ class Query:
     # @schema_encoding: schema_encoding
     # @record: record to be inserted
     """
-    def write_to_page(self, range, bt, set, offset, indirection, schema_encoding, record):
+    def write_to_page(self, range, bt, set, offset, indirection, schema_encoding, base_rid, record):
 
         i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.INDIRECTION_COLUMN)
         self.table.bufferpool.pool[i].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
@@ -64,11 +64,13 @@ class Query:
         i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.SCHEMA_ENCODING_COLUMN)
         self.table.bufferpool.pool[i].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.BASE_RID_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, base_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
         j = 0
-        while j < self.table.num_cols:
+        while j < self.table.num_columns:
             index = self.table.bufferpool.find_index(self.table.name, range, bt, set, j+Config.NUM_META_COLS)
             self.table.bufferpool.pool[index].write(offset, record.columns[j].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-            #print(self.table.bufferpool.pool[index].path)
             j += 1
             
     """
@@ -101,15 +103,16 @@ class Query:
             # invalidate record
             self.table.ranges[range_index][tail][set_index][Config.RID_COLUMN].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
-    
+     """
+
     # Insert into a database
     # @param: *columns - columns to be written
-    """
+    
     # Insert a record with specified columns
     def insert(self, *columns):
 
         # generate schema encoding
-        schema_encoding = '0' * self.table.num_cols
+        schema_encoding = '0' * self.table.num_columns
 
         self.table.assign_rid('insert') # get valid rid
         record = Record(self.table.base_current_rid, self.table.key, columns)
@@ -132,20 +135,18 @@ class Query:
             path = os.getcwd() + "/" + self.table.name + "/r_" + str(range_index) + "/0/s_" + str(set_index)
             if not os.path.exists(path):
                 os.makedirs(path)
-            for i in range(self.table.num_cols+Config.NUM_META_COLS):
+            for i in range(self.table.num_columns+Config.NUM_META_COLS):
                 file = open(path + "/p_" + str(i) + ".txt", "w+")
                 file.close()
 
-            pages = [Page(path+"/p_"+str(i)+".txt") for i in range(self.table.num_cols+Config.NUM_META_COLS)]
+            pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, range_index, 0, set_index, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
 
             for i in range(len(pages)):
-                print(pages[i].path)
                 index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, i)
                 self.table.bufferpool.pool[index] = pages[i]
 
-        self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record) # writing to page
+        self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record.rid, record) # writing to page
 
-    """
     # Select records from database
     # @param: key - specified key to select record
     # @param: query_columns - columns to return in result
@@ -153,17 +154,19 @@ class Query:
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
-        prev_indirection = int.from_bytes(self.table.ranges[page_range][0][set_num][Config.INDIRECTION_COLUMN].read(offset), sys.byteorder)
-        # CHECK IF RECORD EXISTS (MILESTONE 2)
+        latest_rid_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
+        latest_rid = int.from_bytes(self.table.bufferpool.pool[latest_rid_index].read(offset), sys.byteorder)
 
-        if prev_indirection == 0:
+        if latest_rid == 0:
             # read bp
-            return int.from_bytes(self.table.ranges[page_range][0][set_num][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+            col_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
         else:
             # read the tail record
             # use page directory to get physical location of latest tp
-            (range_index, tail, set_index, offset) = self.table.page_directory[prev_indirection]
-            return int.from_bytes(self.table.ranges[range_index][tail][set_index][column_index + Config.NUM_META_COLS].read(offset), sys.byteorder)
+            (range_index, _, set_index, offset) = self.table.page_directory[latest_rid]
+            col_index = self.table.bufferpool.find_index(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
+
+        return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
 
 
     def select(self, key, query_columns):
@@ -183,17 +186,14 @@ class Query:
             else:
                 record_info.append('None')
         
-        rid = int.from_bytes(self.table.ranges[range_index][0][set_index][Config.RID_COLUMN].read(offset), sys.byteorder)
-        #print("rid: " + str(rid))
-        #print("info: " + str(tuple(record_info)))
+        rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+        rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
         return [Record(rid, key, tuple(record_info))]
 
-    """
     # Update a record with specified key and columns
     # @param: key - specified key that corresponds to a record which we want to update
     # @param: *columns - in the form of [1, 2, none, none, 4]
-    """
-
+    
     def update(self, key, *columns):
 
         # find RID for tail record
@@ -209,49 +209,46 @@ class Query:
             else:
                 new_schema += '1'
 
-        # calculate offset and allocate new page if necessary
-        if self.table.tail_tracker[base_range] > -1: # if there is already a tail page
-            if self.table.ranges[base_range][1][self.table.tail_tracker[base_range]][0].has_capacity(): # if latest tail page has space
-                tail_offset = self.table.ranges[base_range][1][self.table.tail_tracker[base_range]][0].num_records
-            else:
-                tail_offset = 0
-                self.table.ranges[base_range][1].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-                self.table.tail_tracker[base_range] += 1
-        else:
-            self.table.ranges[base_range].append([])
-            tail_offset = 0
-            self.table.ranges[base_range][1].append([Page() for i in range(self.table.num_columns+Config.NUM_META_COLS)])
-            self.table.tail_tracker[base_range] += 1
+        tail_index = self.table.tail_tracker[base_range]
+        if tail_index == -1: # if no updates to record yet
+            os.makedirs(os.getcwd()+"/"+self.table.name+"/r_"+str(base_range)+"/1")
 
-        self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
+        # Base RID
+        base_rid_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.RID_COLUMN)
+        base_rid = int.from_bytes(self.table.bufferpool[base_rid_index].read(base_offset), sys.byteorder)
 
-        # read previous tail record rid
-        prev_indirection = int.from_bytes(self.table.ranges[base_range][0][base_set][Config.INDIRECTION_COLUMN].read(base_offset), sys.byteorder)
-        non_updated_values = []
-        if prev_indirection != 0: # if base record has been updated at least once
-            (prev_range, prev_tail, prev_set, prev_offset) = self.table.page_directory[prev_indirection]  
-        else: # if base record has not been updated
-            prev_range = base_range
-            prev_tail = 0
-            prev_set = base_set
-            prev_offset = base_offset
-        for i in range(self.table.num_columns):
-            if new_schema[i] == '0':
-                value = int.from_bytes(self.table.ranges[prev_range][prev_tail][prev_set][Config.NUM_META_COLS+i].read(prev_offset), sys.byteorder)
-                non_updated_values.append(value)
-        
+        # Base Indirection
+        base_indirection_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.INDIRECTION_COLUMN)
+        base_ind = int.from_bytes(self.table.bufferpool[base_indirection_index].read(base_offset), sys.byteorder)
+        self.table.bufferpool.pool[base_indirection_index].write(base_offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        # Base SE
+        base_SE_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.SCHEMA_ENCODING_COLUMN)
+        base_SE = int.from_bytes(self.table.bufferpool[base_SE_index].read(base_offset), sys.byteorder)
         # write indirection to base page and update base record schema encoding
-        self.table.ranges[base_range][0][base_set][Config.INDIRECTION_COLUMN].write(base_offset, self.table.tail_current_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-        base_schema = self.int_to_schema(int.from_bytes(self.table.ranges[base_range][0][base_set][Config.SCHEMA_ENCODING_COLUMN].read(base_offset), sys.byteorder))
+        base_schema = self.int_to_schema(base_SE)
         result_schema = ""
         for i in range(self.table.num_columns):
             if base_schema[i] == '1' or new_schema[i] == '1':
                 result_schema += '1'
             else:
                 result_schema += '0'
-        self.table.ranges[base_range][0][base_set][Config.SCHEMA_ENCODING_COLUMN].write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        self.table.bufferpool.pool[base_SE_index].write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
-        # write tail record
+        # Get information from latest updated record
+        non_updated_values = []
+        if base_ind != 0: # if base record has been updated at least once
+            (prev_range, prev_bt, prev_set, prev_offset) = self.table.page_directory[base_ind]  
+        else: # if base record has not been updated
+            prev_range = base_range
+            prev_bt = 0
+            prev_set = base_set
+            prev_offset = base_offset
+        for i in range(self.table.num_columns):
+            if new_schema[i] == '0':
+                index = self.table.bufferpool.find_index(self.table.name, prev_range, prev_bt, prev_set, i+Config.NUM_META_COLS)
+                value = int.from_bytes(self.table.bufferpool.pool[index].read(prev_offset), sys.byteorder)
+                non_updated_values.append(value)
         count = 0
         new_columns = []
         for i in range(self.table.num_columns):
@@ -261,9 +258,36 @@ class Query:
             else:
                 new_columns.append(columns[i])
         record.columns = tuple(new_columns)
-        self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, prev_indirection, self.schema_to_int(new_schema), record)
 
-    
+        # write tail record to memory
+        if tail_index == -1: # no tail page created yet
+            path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_0"
+            os.makedirs(path)
+            self.table.tail_tracker[base_range] = 0
+            tail_offset = 0
+            pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, 0, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
+            for i in range(len(pages)):
+                index = self.table.bufferpool.find_index(self.table.name, base_range, 1, 0, i)
+                self.table.bufferpool.pool[index] = pages[i]
+        else: # if tail page has been created
+            index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], 0)
+            if self.table.bufferpool.pool[index].has_capacity:
+                tail_offset = self.table.bufferpool.pool[index].num_records
+                for i in range(1, Config.NUM_META_COLS+self.table.num_columns):
+                    _ = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
+            else:
+                self.table.tail_tracker[base_range] += 1
+                tail_offset = 0
+                path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_" + self.table.tail_tracker[base_range]
+                os.makedirs(path)
+                pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
+                for i in range(len(pages)):
+                    index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
+                    self.table.bufferpool.pool[index] = pages[i]
+
+        self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
+
+    """
     :param start_range: int         # Start of the key range to aggregate 
     :param end_range: int           # End of the key range to aggregate 
     :param aggregate_columns: int  # Index of desired column to aggregate
