@@ -66,13 +66,12 @@ class Bufferpool:
             file.write(data_str)
             file.close()
 
-            del self.directory[self.pool[evict_index].location]
+        del self.directory[self.pool[evict_index].location]
 
     def find_index(self, table, range, bt, set, page):
         i = self.directory[(table, range, bt, set, page)]
-
         if i == -1:
-            if len(self.empty) == 0:
+            if len(self.used) == len(self.pool):
                 self.evict()
             
             path = os.getcwd() + "/" + self.table.name + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"

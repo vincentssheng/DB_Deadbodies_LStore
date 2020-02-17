@@ -200,7 +200,6 @@ class Query:
         self.table.assign_rid('update')
         record = Record(self.table.tail_current_rid, self.table.key, columns)
         (base_range, base_set, base_offset) = self.table.key_directory[key]
-
         # generate schema encoding
         new_schema = ""
         for i in range(self.table.num_columns):
@@ -210,21 +209,22 @@ class Query:
                 new_schema += '1'
 
         tail_index = self.table.tail_tracker[base_range]
-        if tail_index == -1: # if no updates to record yet
-            os.makedirs(os.getcwd()+"/"+self.table.name+"/r_"+str(base_range)+"/1")
+        path = os.getcwd()+"/"+self.table.name+"/r_"+str(base_range)+"/1"
+        if tail_index == -1 and not os.path.exists(path): # if no updates to record yet
+            os.makedirs(path)
 
-        # Base RID
+        # Base RID (1)
         base_rid_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.RID_COLUMN)
-        base_rid = int.from_bytes(self.table.bufferpool[base_rid_index].read(base_offset), sys.byteorder)
-
-        # Base Indirection
+        base_rid = int.from_bytes(self.table.bufferpool.pool[base_rid_index].read(base_offset), sys.byteorder)
+        
+        # Base Indirection (0)
         base_indirection_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.INDIRECTION_COLUMN)
-        base_ind = int.from_bytes(self.table.bufferpool[base_indirection_index].read(base_offset), sys.byteorder)
+        base_ind = int.from_bytes(self.table.bufferpool.pool[base_indirection_index].read(base_offset), sys.byteorder)
         self.table.bufferpool.pool[base_indirection_index].write(base_offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
-        # Base SE
+        # Base SE (3)
         base_SE_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.SCHEMA_ENCODING_COLUMN)
-        base_SE = int.from_bytes(self.table.bufferpool[base_SE_index].read(base_offset), sys.byteorder)
+        base_SE = int.from_bytes(self.table.bufferpool.pool[base_SE_index].read(base_offset), sys.byteorder)
         # write indirection to base page and update base record schema encoding
         base_schema = self.int_to_schema(base_SE)
         result_schema = ""
@@ -262,11 +262,14 @@ class Query:
         # write tail record to memory
         if tail_index == -1: # no tail page created yet
             path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_0"
-            os.makedirs(path)
+            if not os.path.exists(path):
+                os.makedirs(path)
             self.table.tail_tracker[base_range] = 0
             tail_offset = 0
             pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, 0, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
             for i in range(len(pages)):
+                file = open(path + "/p_" + str(i) + ".txt", "w+")
+                file.close()
                 index = self.table.bufferpool.find_index(self.table.name, base_range, 1, 0, i)
                 self.table.bufferpool.pool[index] = pages[i]
         else: # if tail page has been created
@@ -279,12 +282,14 @@ class Query:
                 self.table.tail_tracker[base_range] += 1
                 tail_offset = 0
                 path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_" + self.table.tail_tracker[base_range]
-                os.makedirs(path)
+                if not os.path.exists(path):
+                    os.makedirs(path)
                 pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
                 for i in range(len(pages)):
                     index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
                     self.table.bufferpool.pool[index] = pages[i]
 
+        self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
 
     """
