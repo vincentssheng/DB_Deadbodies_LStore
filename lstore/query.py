@@ -296,6 +296,7 @@ class Query:
     :param start_range: int         # Start of the key range to aggregate 
     :param end_range: int           # End of the key range to aggregate 
     :param aggregate_columns: int  # Index of desired column to aggregate
+    """
     
     def sum(self, start_range, end_range, aggregate_column_index):
         # need to make sure key is available
@@ -319,4 +320,3 @@ class Query:
             sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
 
         return sum
-        """
