@@ -1,5 +1,5 @@
 from lstore.table import Table
-import os, sys
+import os, sys, json
 from collections import defaultdict
 from lstore.page import *
 
@@ -66,7 +66,7 @@ class Bufferpool:
             if len(self.used) == len(self.pool):
                 self.evict()
             
-            path = os.getcwd() + "/" + table + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
+            path = os.getcwd() + "/r_" + str(range) + "/" + str(bt) + "/s_" + str(set) + "/p_" + str(page) + ".txt"
             i = self.retrieve(path, (table, range, bt, set, page))
             self.directory.update({(table, range, bt, set, page): i})
         
@@ -91,7 +91,7 @@ class Database():
     def close(self):
         for _, table in self.tables.items():
             table.bufferpool.flush_pool()
-            table.unload_dirs()
+            table.unload_meta()
 
 
     """
@@ -101,7 +101,7 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key):
-        table = Table(name, num_columns, key, self.bufferpool)
+        table = Table(name, key, num_columns, self.bufferpool, -1, 0, Config.MAX_RID, [])
         self.tables.update({name: table}) # insert table with name
         return table
 
@@ -115,6 +115,12 @@ class Database():
     # Returns table with the passed name
     """
     def get_table(self, name):
-        return self.tables[name]
+        with open(os.getcwd()+'/'+name+'/metadata.json', 'r') as fp:
+            meta_dict = json.loads(fp.read())
+        fp.close()
+
+        table = Table(name, meta_dict['key'], meta_dict['num_columns'], self.bufferpool, meta_dict['latest_range'], meta_dict['base_rid'], meta_dict['tail_rid'], meta_dict['tail_tracker'])
+        self.tables.update({name: table})
+        return table
 
 

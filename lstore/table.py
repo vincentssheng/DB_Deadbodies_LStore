@@ -12,26 +12,28 @@ class Record:
 
 class Table:
 
-    # static variable
-    base_current_rid = 0 
-    tail_current_rid = Config.MAX_RID
-    tail_tracker = [] # tracks the latest tail set ID for each range
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-    def __init__(self, name, num_columns, key, bufferpool):
+    def __init__(self, name, key, num_columns, bufferpool, latest_range_index, base_current_rid, tail_current_rid, tail_tracker):
+        
         self.name = name
         self.key = key
         self.num_columns = num_columns
         self.page_directory = {} # dictionary that maps rid to (range #, page_set #, offset)
         self.key_directory = {} # dictionary that maps key to (range #, page_set #, offset)
         self.index = Index(self)
-        self.latest_range_index = -1
+        self.latest_range_index = latest_range_index
         self.bufferpool = bufferpool
+        self.base_current_rid = base_current_rid
+        self.tail_current_rid = tail_current_rid
+        self.tail_tracker = tail_tracker
+
         if not os.path.exists(os.getcwd() + "/" + name):
             os.makedirs(name)
+        os.chdir(name)
 
         pgdir_file = os.getcwd() + "/pgdir.json"
         file = open(pgdir_file, "w+")
@@ -49,7 +51,19 @@ class Table:
                 self.key_directory = json.loads(fp.read())
             fp.close()
 
-    def unload_dirs(self):
+    def unload_meta(self):
+
+        meta_dict = {}
+        meta_dict.update({'key': self.key})
+        meta_dict.update({'num_columns': self.num_columns})
+        meta_dict.update({'latest_range': self.latest_range_index})
+        meta_dict.update({'base_rid': self.base_current_rid})
+        meta_dict.update({'tail_rid': self.tail_current_rid})
+        meta_dict.update({'tail_tracker': self.tail_tracker})
+        with open(os.getcwd()+'/metadata.json', "w") as fp:
+            json.dump(meta_dict, fp)
+        fp.close()
+
         with open(os.getcwd()+'/pgdir.json', "w") as fp:
             json.dump(self.page_directory, fp)
         fp.close()

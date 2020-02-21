@@ -130,13 +130,13 @@ class Query:
         if range_index > self.table.latest_range_index:
             self.table.tail_tracker.append(-1)
             self.table.latest_range_index += 1
-            path = os.getcwd() + "/" + self.table.name + "/r_" + str(range_index) + "/0"
+            path = os.getcwd() + "/r_" + str(range_index) + "/0"
             if not os.path.exists(path):
                 os.makedirs(path)
 
         # Create new page?
         if offset == 0:
-            path = os.getcwd() + "/" + self.table.name + "/r_" + str(range_index) + "/0/s_" + str(set_index)
+            path = os.getcwd() + "/r_" + str(range_index) + "/0/s_" + str(set_index)
             if not os.path.exists(path):
                 os.makedirs(path)
             for i in range(self.table.num_columns+Config.NUM_META_COLS):
@@ -213,7 +213,7 @@ class Query:
                 new_schema += '1'
 
         tail_index = self.table.tail_tracker[base_range]
-        path = os.getcwd()+"/"+self.table.name+"/r_"+str(base_range)+"/1"
+        path = os.getcwd()+"/r_"+str(base_range)+"/1"
         if tail_index == -1 and not os.path.exists(path): # if no updates to record yet
             os.makedirs(path)
 
@@ -265,7 +265,7 @@ class Query:
 
         # write tail record to memory
         if tail_index == -1: # no tail page created yet
-            path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_0"
+            path = os.getcwd() + "/r_" + str(base_range) + "/1" + "/s_0"
             if not os.path.exists(path):
                 os.makedirs(path)
             self.table.tail_tracker[base_range] = 0
@@ -285,7 +285,7 @@ class Query:
             else:
                 self.table.tail_tracker[base_range] += 1
                 tail_offset = 0
-                path = os.getcwd() + "/" + self.table.name + "/r_" + str(base_range) + "/1" + "/s_" + self.table.tail_tracker[base_range]
+                path = os.getcwd() + "/r_" + str(base_range) + "/1" + "/s_" + self.table.tail_tracker[base_range]
                 if not os.path.exists(path):
                     os.makedirs(path)
                 pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
