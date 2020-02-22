@@ -129,6 +129,8 @@ class Query:
         # Create new range?
         if range_index > self.table.latest_range_index:
             self.table.tail_tracker.append(-1)
+            self.table.merge_tracker.append(-1)
+            self.table.base_tracker.append(0)
             self.table.latest_range_index += 1
             path = os.getcwd() + "/r_" + str(range_index) + "/0"
             if not os.path.exists(path):
@@ -139,7 +141,10 @@ class Query:
             path = os.getcwd() + "/r_" + str(range_index) + "/0/s_" + str(set_index)
             if not os.path.exists(path):
                 os.makedirs(path)
-            for i in range(self.table.num_columns+Config.NUM_META_COLS):
+            ind_path = os.getcwd() + "/r_" + str(range_index) + "/0/indirection.txt"
+            file = open(ind_path, 'w+')
+            file.close()
+            for i in range(1, self.table.num_columns+Config.NUM_META_COLS):
                 file = open(path + "/p_" + str(i) + ".txt", "w+")
                 file.close()
 
@@ -159,7 +164,9 @@ class Query:
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
         latest_rid_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
+        self.table.bufferpool.pool[latest_rid_index].pin_count += 1
         latest_rid = int.from_bytes(self.table.bufferpool.pool[latest_rid_index].read(offset), sys.byteorder)
+        self.table.bufferpool.pool[latest_rid_index].pin_count -= 1
 
         if latest_rid == 0:
             # read bp
@@ -191,7 +198,9 @@ class Query:
                 record_info.append('None')
         
         rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+        self.table.bufferpool.pool[rid_index].pin_count += 1
         rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
+        self.table.bufferpool.pool[rid_index].pin_count -= 1
         return [Record(rid, key, tuple(record_info))]
 
     # Update a record with specified key and columns
@@ -269,6 +278,7 @@ class Query:
             if not os.path.exists(path):
                 os.makedirs(path)
             self.table.tail_tracker[base_range] = 0
+            self.table.merge_tracker[base_range] = 0
             tail_offset = 0
             pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, 0, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
             for i in range(len(pages)):
@@ -278,18 +288,20 @@ class Query:
                 self.table.bufferpool.pool[index] = pages[i]
         else: # if tail page has been created
             index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], 0)
-            if self.table.bufferpool.pool[index].has_capacity:
+            if self.table.bufferpool.pool[index].has_capacity():
                 tail_offset = self.table.bufferpool.pool[index].num_records
                 for i in range(1, Config.NUM_META_COLS+self.table.num_columns):
                     _ = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
             else:
                 self.table.tail_tracker[base_range] += 1
                 tail_offset = 0
-                path = os.getcwd() + "/r_" + str(base_range) + "/1" + "/s_" + self.table.tail_tracker[base_range]
+                path = os.getcwd() + '/r_' + str(base_range) + '/1/s_' + str(self.table.tail_tracker[base_range])
                 if not os.path.exists(path):
                     os.makedirs(path)
                 pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
                 for i in range(len(pages)):
+                    file = open(path+"/p_"+str(i)+".txt", 'w+')
+                    file.close()
                     index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
                     self.table.bufferpool.pool[index] = pages[i]
 

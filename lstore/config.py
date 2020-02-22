@@ -27,3 +27,5 @@ class Config:
     BASE_INDEX = 0
     TAIL_INDEX = 1
     TODO_VALUE_TIMESTAMP = 420
+
+    MERGE_INTERVAL = 10 # second(s)

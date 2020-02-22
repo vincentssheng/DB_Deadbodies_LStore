@@ -1,7 +1,9 @@
 from lstore.index import Index
 from lstore.config import *
-from time import time
-import os, json
+import os, json, threading, time
+from lstore.page import *
+from collections import defaultdict
+from datetime import datetime
 
 class Record:
 
@@ -17,7 +19,10 @@ class Table:
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-    def __init__(self, name, key, num_columns, bufferpool, latest_range_index, base_current_rid, tail_current_rid, tail_tracker):
+    def __init__(self, name, key, num_columns, 
+                    bufferpool, latest_range_index, base_current_rid, 
+                    tail_current_rid, tail_tracker, interval, 
+                    merge_tracker, base_tracker):
         
         self.name = name
         self.key = key
@@ -30,6 +35,15 @@ class Table:
         self.base_current_rid = base_current_rid
         self.tail_current_rid = tail_current_rid
         self.tail_tracker = tail_tracker
+        self.merge_tracker = merge_tracker
+        self.base_tracker = base_tracker
+        self.pd_lock = threading.Lock()
+
+        # Background thread stuff
+        self.interval = interval
+        thread = threading.Thread(target=self.__merge, args=())
+        thread.daemon = True
+        #thread.start()
 
         if not os.path.exists(os.getcwd() + "/" + name):
             os.makedirs(name)
@@ -60,6 +74,8 @@ class Table:
         meta_dict.update({'base_rid': self.base_current_rid})
         meta_dict.update({'tail_rid': self.tail_current_rid})
         meta_dict.update({'tail_tracker': self.tail_tracker})
+        meta_dict.update({'merge_tracker': self.merge_tracker})
+        meta_dict.update({'base_tracker': self.base_tracker})
         with open(os.getcwd()+'/metadata.json', "w") as fp:
             json.dump(meta_dict, fp)
         fp.close()
@@ -106,7 +122,91 @@ class Table:
             file = open(path + "/p_" + str(i) + ".txt", "w+")
             file.close()
 
+    """
+    bp and tp are parallel lists of base pages and tail pages
+    """
+    def merge(self, bp, tp):
+        base_rids = defaultdict(lambda:-1)
+        # get latest tail record RID and assign it to lineage
+        latest_tps = int.from_bytes(tp[0].read(tp[0].num_records-1), sys.byteorder)
+        for page in bp:
+            page.lineage = latest_tps
+        # merge records
+        for offset in range(tp[0].num_records-1, -1, -1):
+            base_rid = int.from_bytes(tp[0].read(offset), sys.byteorder) # base_rid is always at 1st element
+            # if we have not merge this record
+            if base_rids[base_rid] == -1:
+                base_rids.update({base_rid: 1})
+                (_, _, _, base_offset) = self.page_directory[base_rid]               
+                for i in range(len(tp)-1): # copy all columns over
+                    bp[i+Config.NUM_META_COLS].write(base_offset, tp[i+1].read(offset))
+                bp[Config.TIMESTAMP_COLUMN].write(base_offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+        return bp
+
     # __ means its internal to the class, never going to be used outside
     def __merge(self):
-        pass
+        mergeQ = [] # Merge Queue contains indexes of ranges that are ready for merging
+        sets_of_tail_pages = [[] for i in range(self.merge_tracker)] # Pages is the list of tail pages
+        while True:
+            print("Merging")
+            # 1. Check each tail page's capacity and insert into merge queue if the tail page is full
+            for (i, set) in enumerate(self.merge_tracker):
+                path = os.getcwd() + '/r_' + str(i) + '/1/s_' + str(set)
+                sets_of_tail_pages[i].append(Page(path+'/p_'+str(Config.BASE_RID_COLUMN)+'.txt', 
+                                                (self.name, i, 1, set, Config.BASE_RID_COLUMN))) # get RID column
+                """
+                if tail page is full and
+                if we have not merged the latest tail page in the range
+                """
+                if not sets_of_tail_pages[i][0].has_capacity() and not self.merge_tracker[i] < self.tail_tracker[i]:
+                    for j in range(Config.BASE_RID_COLUMN+1, Config.NUM_META_COLS+self.num_columns):
+                        mergeQ.append(i) # append range index to merge queue
+                        sets_of_tail_pages[i].append(Page(path+'/p_'+str(j)+'.txt', (self.name, i, 1, set, j))) # retrieve all tail pages
+
+            # while we have outstanding indexes to merge
+            # merge them one set at a time
+            while len(mergeQ) > 0:
+                index = mergeQ.pop(0)
+                base_path = os.getcwd() + '/r_' + str(index) + '/0/s_' + str(self.base_tracker[index])
+                """
+                for each range's base page
+                merge only if the base page is not full
+                """
+                base_pages = []
+                for (i, tail_pages) in enumerate(sets_of_tail_pages):
+                    base_page = Page(base_path+'/p_'+str(0)+'.txt', (self.name, index, 0, self.base_tracker[index], 0))
+                    if base_page.has_capacity():
+                        break # skip the base pages that are not full
+                    base_pages = [base_page]
+                    for j in range(1, Config.NUM_META_COLS+self.num_columns):
+                        if j == 0 :
+                            continue
+                        base_page = Page(base_path+'/p_'+str(j)+'.txt', (self.name, index, 0, self.base_tracker[index], j))
+                        base_pages.append(base_page)
+
+                    consolidated_bp = self.merge(base_pages, tail_pages)
+
+                # Create files and write
+                self.base_tracker[index] += 1
+                new_base_path = os.getcwd() + '/r_' + str(index) + '/0/s_' + str(self.base_tracker[index])
+                os.makedirs(new_base_path)
+                for i in range(1, Config.NUM_META_COLS+self.num_columns):
+                    file = open(new_base_path+'/p_'+str(i)+'.txt', 'w')
+                    data_str = ""
+                    for j in range(consolidated_bp[i].num_records):
+                        data_str += str(int.from_bytes(consolidated_bp[i].read(j), sys.byteorder))
+
+                    file.write(data_str)
+                    file.close()
+
+                # Swap consolidated page into page directory
+                self.pd_lock.acquire()
+                for i in range(len(consolidated_bp[0])):
+                    rid = consolidated_bp[0].read(i)
+                    self.page_directory[rid] = (index, 0, self.base_tracker[index], i)
+                    self.key_directory[rid] = (index, self.base_tracker[index], i)
+                self.pd_lock.release()
+
+            time.sleep(self.interval)
  

@@ -8,7 +8,9 @@ class Page:
         self.path = path
         self.location = location
         self.num_records = 0
+        self.pin_count = 0
         self.dirty = False
+        self.lineage = Config.MAX_RID
 
     def has_capacity(self):
         if self.num_records < Config.NUM_RECORDS_PER_SET:
