@@ -1,3 +1,5 @@
+from lstore.bplustree import BPlusTree
+
 """
 A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
@@ -13,6 +15,7 @@ class Index:
     """
 
     def locate(self, column, value):
+        # traversing B-Tree to find wanted value within specified column
         pass
 
     """
@@ -20,6 +23,7 @@ class Index:
     """
 
     def locate_range(self, begin, end, column):
+        
         pass
 
     """
@@ -27,6 +31,7 @@ class Index:
     """
 
     def create_index(self, column_number):
+        # create tree here based on column - inserting into tree 
         pass
 
     """
