@@ -110,7 +110,7 @@ class Database():
         table = Table(name, key, num_columns, self.bufferpool, 
                         latest_range_index=-1, base_current_rid=0, 
                         tail_current_rid=Config.MAX_RID, 
-                        tail_tracker=[], interval=Config.MERGE_INTERVAL,
+                        tail_tracker=[],
                         merge_tracker=[], base_tracker=[])
         self.tables.update({name: table}) # insert table with name
         return table
@@ -133,7 +133,7 @@ class Database():
         table = Table(name, meta_dict['key'], meta_dict['num_columns'], 
                         self.bufferpool, meta_dict['latest_range'], 
                         meta_dict['base_rid'], meta_dict['tail_rid'], 
-                        meta_dict['tail_tracker'], Config.MERGE_INTERVAL,
+                        meta_dict['tail_tracker'],
                         meta_dict['merge_tracker'], meta_dict['base_tracker'])
         self.tables.update({name: table})
         return table

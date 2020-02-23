@@ -19,7 +19,8 @@ class Page:
 
     def write(self, offset, value):
         self.dirty = True
-        self.num_records += 1
+        if offset >= self.num_records:
+            self.num_records += 1
         self.data[offset*Config.ENTRY_SIZE:((offset+1)*Config.ENTRY_SIZE)] = value
 
     def read(self, offset):

@@ -129,7 +129,7 @@ class Query:
         # Create new range?
         if range_index > self.table.latest_range_index:
             self.table.tail_tracker.append(-1)
-            self.table.merge_tracker.append(-1)
+            self.table.merge_tracker.append(0)
             self.table.base_tracker.append(0)
             self.table.latest_range_index += 1
             path = os.getcwd() + "/r_" + str(range_index) + "/0"
@@ -278,7 +278,6 @@ class Query:
             if not os.path.exists(path):
                 os.makedirs(path)
             self.table.tail_tracker[base_range] = 0
-            self.table.merge_tracker[base_range] = 0
             tail_offset = 0
             pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, 0, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
             for i in range(len(pages)):

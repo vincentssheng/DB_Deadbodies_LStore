@@ -28,4 +28,4 @@ class Config:
     TAIL_INDEX = 1
     TODO_VALUE_TIMESTAMP = 420
 
-    MERGE_INTERVAL = 10 # second(s)
+    MERGE_INTERVAL = 2 # second(s)
