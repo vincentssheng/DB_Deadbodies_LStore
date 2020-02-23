@@ -168,6 +168,9 @@ class Query:
         latest_rid = int.from_bytes(self.table.bufferpool.pool[latest_rid_index].read(offset), sys.byteorder)
         self.table.bufferpool.pool[latest_rid_index].pin_count -= 1
 
+        if latest_rid > self.table.bufferpool.pool[latest_rid_index].lineage:
+            latest_rid = 0 # read from base page if bp lineage is newer
+
         if latest_rid == 0:
             # read bp
             col_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
