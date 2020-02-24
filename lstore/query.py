@@ -183,29 +183,35 @@ class Query:
         return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
 
 
-    def select(self, key, query_columns):
-        # need to make sure key is available
-        if key not in self.table.key_directory.keys():
-            # error, cannot find a key that does NOT exist
-            return None
+    def select(self, key, column, query_columns):
+        self.table.index.create_index(column)
+        record_list = []
 
         # find base record physical location
-        (range_index, set_index, offset) = self.table.key_directory[key]
-
-        record_info = []
-
-        for i in range(len(query_columns)):
-            if query_columns[i] == 1:
-                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
-            else:
-                record_info.append('None')
+        record_locations = self.table.index.locate(column, key)
         
-        rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
-        self.table.bufferpool.pool[rid_index].pin_count += 1
-        rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
-        self.table.bufferpool.pool[rid_index].pin_count -= 1
-        return [Record(rid, key, tuple(record_info))]
+        if (record_locations == None):
+            return record_list  # or None?
+        
+        for i in range(len(record_locations)):
+            record_info = []
+            (range_index, set_index, offset) = record_locations[i]
 
+            for j in range(len(query_columns)):
+                if query_columns[j] == 1:
+                    record_info.append(self.get_latest_val(range_index, set_index, offset, j))
+                else:
+                    record_info.append('None')
+            
+            rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+            self.table.bufferpool.pool[rid_index].pin_count += 1
+            rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
+            self.table.bufferpool.pool[rid_index].pin_count -= 1
+            record_list.append(Record(rid, key, tuple(record_info)))
+        
+        return record_list
+
+        
     # Update a record with specified key and columns
     # @param: key - specified key that corresponds to a record which we want to update
     # @param: *columns - in the form of [1, 2, none, none, 4]

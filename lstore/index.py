@@ -34,7 +34,7 @@ class Index:
         for i in range (len(rids)) : 
             (page_index, _, set_index, offset) = self.table.page_directory[rids[i]]
             record_locations.append((page_index, set_index, offset))
-
+        
         return record_locations
         pass
 
