@@ -22,7 +22,7 @@ class Table:
     def __init__(self, name, key, num_columns, 
                     bufferpool, latest_range_index, base_current_rid, 
                     tail_current_rid, tail_tracker, 
-                    merge_tracker, base_tracker):
+                    merge_tracker, base_tracker, method='create'):
         
         self.name = name
         self.key = key
@@ -43,25 +43,26 @@ class Table:
             os.makedirs(name)
         os.chdir(name)
 
-        pgdir_file = os.getcwd() + "/pgdir.json"
-        if not os.path.exists(pgdir_file):
-            file = open(pgdir_file, "w+")
-            file.close()
-        else:
-            with open(pgdir_file, "rb") as fp:
-                pgdir_data = json.loads(fp.read())
-                self.page_directory = {int(k):v for k,v in pgdir_data.items()}
-            fp.close()
-        
-        keydir_file = os.getcwd() + "/keydir.json"
-        if not os.path.exists(keydir_file):
-            file = open(keydir_file, "w+")
-            file.close()
-        else:
-            with open(keydir_file, "rb") as fp:
-                key_data = json.loads(fp.read())
-                self.key_directory = {int(k):v for k,v in key_data.items()}
-            fp.close()
+        if method == 'get':
+            pgdir_file = os.getcwd() + "/pgdir.json"
+            if not os.path.exists(pgdir_file):
+                file = open(pgdir_file, "w+")
+                file.close()
+            else:
+                with open(pgdir_file, "rb") as fp:
+                    pgdir_data = json.loads(fp.read())
+                    self.page_directory = {int(k):v for k,v in pgdir_data.items()}
+                fp.close()
+            
+            keydir_file = os.getcwd() + "/keydir.json"
+            if not os.path.exists(keydir_file):
+                file = open(keydir_file, "w+")
+                file.close()
+            else:
+                with open(keydir_file, "rb") as fp:
+                    key_data = json.loads(fp.read())
+                    self.key_directory = {int(k):v for k,v in key_data.items()}
+                fp.close()
 
         # Background thread stuff
         self.interval = Config.MERGE_INTERVAL
@@ -172,6 +173,7 @@ class Table:
             consolidated_bp = []
             tail_flag = True
 
+            """
             print("Merge Tracker")
             print(self.merge_tracker)
             print("Tail Tracker")
@@ -179,6 +181,7 @@ class Table:
             print("Merge Queue")
             print(mergeQ)
             print("==================================")
+            """
 
             # Check each tail page's capacity and insert into merge queue if the tail page is full
             for (i, set) in enumerate(self.merge_tracker):

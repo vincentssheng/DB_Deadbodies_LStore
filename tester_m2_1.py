@@ -26,8 +26,8 @@ for key in keys:
             error = True
     if error:
         print('select error on', key, ':', record, ', correct:', records[key])
-    # else:
-    #     print('select on', key, ':', record)
+    else:
+        print('select on', key, ':', record)
 print("Select finished")
 
 for _ in range(10):
@@ -46,8 +46,8 @@ for _ in range(10):
                     error = True
             if error:
                 print('update error on', original, 'and', updated_columns, ':', record, ', correct:', records[key])
-            # else:
-            #     print('update on', original, 'and', updated_columns, ':', record)
+            else:
+                print('update on', original, 'and', updated_columns, ':', record)
             updated_columns[i] = None
 print("Update finished")
 
@@ -57,7 +57,7 @@ for i in range(0, 100):
     result = query.sum(keys[r[0]], keys[r[1]], 0)
     if column_sum != result:
         print('sum error on [', keys[r[0]], ',', keys[r[1]], ']: ', result, ', correct: ', column_sum)
-    # else:
-    #     print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
+    else:
+        print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
 print("Aggregate finished")
 db.close()
