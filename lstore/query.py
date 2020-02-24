@@ -87,8 +87,10 @@ class Query:
         base_rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
+        self.table.pd_lock.acquire()
         del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
+        self.table.pd_lock.release()
 
         # delete base record
         self.table.bufferpool.pool[rid_index].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
@@ -99,7 +101,9 @@ class Query:
             (next_range, _, next_set, next_offset) = self.table.page_directory[indirection]
 
             # delete from page directory
+            self.table.pd_lock.acquire()
             del self.table.page_directory[indirection]
+            self.table.pd_lock.release()
             ind_index = self.table.bufferpool.find_index(self.table.name, next_range, 1, next_set, Config.INDIRECTION_COLUMN) 
             indirection = int.from_bytes(self.table.bufferpool.pool[ind_index].read(next_offset), sys.byteorder)
 
@@ -123,8 +127,10 @@ class Query:
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
         # store physical location in page directory
+        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (range_index, 0, set_index, offset)}) 
         self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
+        self.table.pd_lock.release()
 
         # Create new range?
         if range_index > self.table.latest_range_index:
@@ -183,7 +189,7 @@ class Query:
         return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
 
 
-    def select(self, key, query_columns):
+    def select(self, key, index_column, query_columns):
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist
@@ -307,7 +313,9 @@ class Query:
                     index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
                     self.table.bufferpool.pool[index] = pages[i]
 
+        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
+        self.table.pd_lock.release()
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
 
     """
@@ -318,9 +326,12 @@ class Query:
     
     def sum(self, start_range, end_range, aggregate_column_index):
         # need to make sure key is available
-        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
+        while start_range not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist
-            return 0
+            start_range += 1
+
+        while end_range not in self.table.key_directory.keys():
+            end_range -= 1
 
         (range_index, set_index, offset) = self.table.key_directory[start_range]
         sum = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
@@ -334,7 +345,6 @@ class Query:
             
             # get physical location
             (range_index, set_index, offset) = self.table.key_directory[start_range]
-
-            sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
-
+            retval = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
+            sum += retval
         return sum
