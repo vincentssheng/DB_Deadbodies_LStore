@@ -184,7 +184,6 @@ class Query:
 
 
     def select(self, key, column, query_columns):
-        self.table.index.create_index(column)
         record_list = []
 
         # find base record physical location

@@ -16,6 +16,7 @@ class Index:
         # DEFAULT : primary_key (SID column)
         # put the line below in your tester since user creates index
         # self.create_index(0)
+        self.indexes = [sorteddict.SortedDict() for i in range(Config.NUM_META_COLS + self.table.num_columns)]
         pass
 
     """
@@ -24,6 +25,9 @@ class Index:
 
     def locate(self, column, value):
         # traversing sortedDict to find wanted value within specified column
+        # self.create_index(column)
+        self.indexes[column].update(column)
+
         if (not self.sortedDict.__contains__(value)) :
             return None
 
@@ -44,7 +48,19 @@ class Index:
 
     def locate_range(self, begin, end, column):
         # traverse through sortedDict and find which leaves value would be between
-        
+        self.indexes[column].update(column)
+        #self.drop_index(column)
+        #self.create_index(column)
+        cumul_rids = []
+
+        for i in range(begin, end + 1) :
+            if (not self.sortedDict.__contains__(i)) :
+                continue
+
+            rid_list = self.sortedDict.get(i)
+            cumul_rids += rid_list
+                
+        return cumul_rids
         pass
 
     """
@@ -97,7 +113,6 @@ class Index:
             else :
                 self.sortedDict.update({column_val: [rid]})
 
-        # print(self.sortedDict)
         pass
 
 
@@ -106,4 +121,6 @@ class Index:
     """
 
     def drop_index(self, column_number):
+        if (self.indexes[column_number].__contains__(column_number)) : 
+            self.indexes[column_number].clear()
         pass
