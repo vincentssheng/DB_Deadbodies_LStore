@@ -29,9 +29,8 @@ class Index:
 
     def locate(self, column, value):
         # traversing sortedDict to find wanted value within specified column
-        # self.create_index(column)
         self.update(column)
-
+        
         if (not self.indexes[Config.NUM_META_COLS + column].__contains__(value)) :
             return None
 
@@ -44,7 +43,6 @@ class Index:
             record_locations.append((page_index, set_index, offset))
         
         return record_locations
-        pass
 
     """
     Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -53,6 +51,11 @@ class Index:
     def locate_range(self, begin, end, column):
         # traverse through sortedDict and find which leaves value would be between
         self.update(column)
+
+        if (not self.indexes[Config.NUM_META_COLS + column].__contains__(begin) or 
+            not self.indexes[Config.NUM_META_COLS + column].__contains__(end)) :
+            return None
+        
         cumul_rids = []
 
         for i in range(begin, end + 1) :
@@ -63,7 +66,6 @@ class Index:
             cumul_rids += rid_list
                 
         return cumul_rids
-        pass
 
     """
     # optional: Create index on specific column

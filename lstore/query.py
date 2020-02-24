@@ -319,6 +319,20 @@ class Query:
     """
     
     def sum(self, start_range, end_range, aggregate_column_index):
+        # get RIDS of all records within range
+        rid_list = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        
+        if (rid_list == None) :
+            return 0
+
+        sum = 0
+
+        for rid in rid_list :
+            # get base record physical location
+            (range_index, _, set_index, offset) = self.table.page_directory[rid]
+            sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
+
+        """
         # need to make sure key is available
         if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
             # error, cannot find a key that does NOT exist
@@ -338,5 +352,5 @@ class Query:
             (range_index, set_index, offset) = self.table.key_directory[start_range]
 
             sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
-
+        """
         return sum
