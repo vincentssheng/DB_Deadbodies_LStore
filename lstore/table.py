@@ -39,31 +39,35 @@ class Table:
         self.base_tracker = base_tracker
         self.pd_lock = threading.Lock()
 
-        # Background thread stuff
-        self.interval = Config.MERGE_INTERVAL
-        self.thread = threading.Thread(target=self.__merge, args=())
-        self.thread.daemon = True
-        self.thread.start()
-
         if not os.path.exists(os.getcwd() + "/" + name):
             os.makedirs(name)
         os.chdir(name)
 
         pgdir_file = os.getcwd() + "/pgdir.json"
-        file = open(pgdir_file, "w+")
-        file.close()
-        if os.stat(pgdir_file).st_size > 0:
+        if not os.path.exists(pgdir_file):
+            file = open(pgdir_file, "w+")
+            file.close()
+        else:
             with open(pgdir_file, "rb") as fp:
-                self.page_directory = json.loads(fp.read())
+                pgdir_data = json.loads(fp.read())
+                self.page_directory = {int(k):v for k,v in pgdir_data.items()}
             fp.close()
         
         keydir_file = os.getcwd() + "/keydir.json"
-        file = open(keydir_file, "w+")
-        file.close()
-        if os.stat(keydir_file).st_size > 0:
+        if not os.path.exists(keydir_file):
+            file = open(keydir_file, "w+")
+            file.close()
+        else:
             with open(keydir_file, "rb") as fp:
-                self.key_directory = json.loads(fp.read())
+                key_data = json.loads(fp.read())
+                self.key_directory = {int(k):v for k,v in key_data.items()}
             fp.close()
+
+        # Background thread stuff
+        self.interval = Config.MERGE_INTERVAL
+        self.thread = threading.Thread(target=self.__merge, args=())
+        self.thread.daemon = True
+        self.thread.start()
 
     def unload_meta(self):
 

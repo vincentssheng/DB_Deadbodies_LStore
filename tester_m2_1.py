@@ -4,7 +4,7 @@ from lstore.query import Query
 from random import choice, randint, sample, seed
 
 db = Database()
-db.open('~/ECS165')
+db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/data")
 # Student Id and 4 grades
 grades_table = db.create_table('Grades', 5, 0)
 query = Query(grades_table)

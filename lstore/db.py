@@ -135,6 +135,7 @@ class Database():
                         meta_dict['base_rid'], meta_dict['tail_rid'], 
                         meta_dict['tail_tracker'],
                         meta_dict['merge_tracker'], meta_dict['base_tracker'])
+        print(os.getcwd())
         self.tables.update({name: table})
         return table
 
