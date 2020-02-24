@@ -202,10 +202,7 @@ class Query:
                 else:
                     record_info.append('None')
             
-            rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
-            self.table.bufferpool.pool[rid_index].pin_count += 1
-            rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
-            self.table.bufferpool.pool[rid_index].pin_count -= 1
+            rid = self.table.index.locate_range(key, key, column)[0]
             record_list.append(Record(rid, key, tuple(record_info)))
         
         return record_list
