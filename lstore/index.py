@@ -12,12 +12,16 @@ class Index:
         # One index for each table. All our empty initially.
         self.table = table
         # initialize sortedDict
-        self.sortedDict = sorteddict.SortedDict()
+        ##  self.sortedDict = sorteddict.SortedDict()
         # DEFAULT : primary_key (SID column)
         # put the line below in your tester since user creates index
         # self.create_index(0)
         self.indexes = [sorteddict.SortedDict() for i in range(Config.NUM_META_COLS + self.table.num_columns)]
         pass
+
+    def update(self, column):
+        self.drop_index(column)
+        self.create_index(column)
 
     """
     # returns the location of all records with the given value on column "column"
@@ -26,12 +30,12 @@ class Index:
     def locate(self, column, value):
         # traversing sortedDict to find wanted value within specified column
         # self.create_index(column)
-        self.indexes[column].update(column)
+        self.update(column)
 
-        if (not self.sortedDict.__contains__(value)) :
+        if (not self.indexes[Config.NUM_META_COLS + column].__contains__(value)) :
             return None
 
-        rids = self.sortedDict.get(value)
+        rids = self.indexes[Config.NUM_META_COLS + column].get(value)
 
         record_locations = []
 
@@ -48,16 +52,14 @@ class Index:
 
     def locate_range(self, begin, end, column):
         # traverse through sortedDict and find which leaves value would be between
-        self.indexes[column].update(column)
-        #self.drop_index(column)
-        #self.create_index(column)
+        self.update(column)
         cumul_rids = []
 
         for i in range(begin, end + 1) :
-            if (not self.sortedDict.__contains__(i)) :
+            if (not self.indexes[Config.NUM_META_COLS + column].__contains__(i)) :
                 continue
 
-            rid_list = self.sortedDict.get(i)
+            rid_list = self.indexes[Config.NUM_META_COLS + column].get(i)
             cumul_rids += rid_list
                 
         return cumul_rids
@@ -104,15 +106,14 @@ class Index:
             (page_index, _, set_index, offset) = self.table.page_directory[rid]
 
             column_val = self.get_latest_val(page_index, set_index, offset, column_number)
-
             # insert value into sortedDict
-            if (self.sortedDict.__contains__(column_val)):
-                rid_list = self.sortedDict.get(column_val)
+            if (self.indexes[Config.NUM_META_COLS + column_number].__contains__(column_val)):
+                rid_list = self.indexes[Config.NUM_META_COLS + column_number].get(column_val)
                 rid_list.append(rid)
-                self.sortedDict.update({column_val: rid_list})
+                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: rid_list})
             else :
-                self.sortedDict.update({column_val: [rid]})
-
+                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: [rid]})
+        #print(self.indexes[Config.NUM_META_COLS + column_number])
         pass
 
 
@@ -121,6 +122,6 @@ class Index:
     """
 
     def drop_index(self, column_number):
-        if (self.indexes[column_number].__contains__(column_number)) : 
-            self.indexes[column_number].clear()
+        if (self.indexes[Config.NUM_META_COLS + column_number]) : 
+            self.indexes[Config.NUM_META_COLS + column_number].clear()
         pass
