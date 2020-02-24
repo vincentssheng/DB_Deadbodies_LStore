@@ -51,11 +51,6 @@ class Index:
     def locate_range(self, begin, end, column):
         # traverse through sortedDict and find which leaves value would be between
         self.update(column)
-
-        if (not self.indexes[Config.NUM_META_COLS + column].__contains__(begin) or 
-            not self.indexes[Config.NUM_META_COLS + column].__contains__(end)) :
-            return None
-        
         cumul_rids = []
 
         for i in range(begin, end + 1) :
