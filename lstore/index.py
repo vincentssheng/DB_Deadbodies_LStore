@@ -11,7 +11,7 @@ class Index:
     def __init__(self, table):
         # One index for each table. All our empty initially.
         self.table = table
-        # initialize BTree
+        # initialize sortedDict
         self.sortedDict = sorteddict.SortedDict()
         # DEFAULT : primary_key (SID column)
         # put the line below in your tester since user creates index
@@ -23,8 +23,19 @@ class Index:
     """
 
     def locate(self, column, value):
-        # traversing B-Tree to find wanted value within specified column
-        # call locate_range
+        # traversing sortedDict to find wanted value within specified column
+        if (not self.sortedDict.__contains__(value)) :
+            return None
+
+        rids = self.sortedDict.get(value)
+
+        record_locations = []
+
+        for i in range (len(rids)) : 
+            (page_index, _, set_index, offset) = self.table.page_directory[rids[i]]
+            record_locations.append((page_index, set_index, offset))
+
+        return record_locations
         pass
 
     """
@@ -32,8 +43,8 @@ class Index:
     """
 
     def locate_range(self, begin, end, column):
-        # traverse through tree and find which leaves value would be between
-
+        # traverse through sortedDict and find which leaves value would be between
+        
         pass
 
     """
@@ -63,11 +74,12 @@ class Index:
 
     
     def create_index(self, column_number):
-        # create tree here based on column - inserting into tree 
+        # populate sortedDict here based on column - insertion
         # note: column_number = primary key column (like SID)
 
         # traverse through all the existing records 
-        for rid in range (1, self.table.base_current_rid) :
+        for i in range (self.table.base_current_rid) :
+            rid = i + 1  # RID cannever be 0
             if rid not in self.table.page_directory.keys():
                 # error, RID does NOT exist
                 continue
@@ -77,8 +89,15 @@ class Index:
 
             column_val = self.get_latest_val(page_index, set_index, offset, column_number)
 
-            # insert value into BTree
-            self.sortedDict.update({(column_val, rid): rid})
+            # insert value into sortedDict
+            if (self.sortedDict.__contains__(column_val)):
+                rid_list = self.sortedDict.get(column_val)
+                rid_list.append(rid)
+                self.sortedDict.update({column_val: rid_list})
+            else :
+                self.sortedDict.update({column_val: [rid]})
+
+        # print(self.sortedDict)
         pass
 
 
