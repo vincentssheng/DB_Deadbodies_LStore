@@ -204,6 +204,7 @@ class Query:
             
             # this line may not be correct as locate_range returns a list of rids
             # and the first rid in this list may not be the one we are looking for
+            # also inefficient as have to generate another sortedDict-->traverse everything
             # rid = self.table.index.locate_range(key, key, column)[0]
 
             rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)

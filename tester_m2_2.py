@@ -5,7 +5,8 @@ from random import choice, randint, sample, seed
 
 # Student Id and 4 grades
 db = Database()
-db.open('~/ECS165')
+db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/data")
+#db.open('~/ECS165A')
 grades_table = db.get_table('Grades')
 query = Query(grades_table)
 
@@ -33,7 +34,7 @@ for key in keys:
         if column != records[key][i]:
             error = True
     if error:
-        print('select error on', key, ':', record, ', correct:', records[key])
+        print('select error on', key, ':', record.columns, ', correct:', records[key])
 print("Select finished")
 
 deleted_keys = sample(keys, 100)
