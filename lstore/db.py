@@ -3,14 +3,17 @@ import os, sys, json, threading
 from collections import defaultdict, OrderedDict
 from lstore.page import *
 
-
+# The bufferpool holds a subset of our persistent (disk) data in RAM
 class Bufferpool:
 
     def __init__(self, db):
         self.db = db
-        self.queue_lock = threading.Lock()
-        self.pool = OrderedDict()
+        self.pool = OrderedDict() # Pages stored in an ordered dictionary to mimic an LRU cache
 
+    """
+    Called upon db.close()
+    Flushes all the dirty pages in the pool into persistent storage
+    """
     def flush_pool(self):
         for _, page in self.pool.copy().items():
             if page.dirty:
@@ -23,6 +26,12 @@ class Bufferpool:
                 file.write(data_str)
                 file.close()
 
+    """
+    Retrieves a page (not currently in pool) and place it in pool
+    @param: path - path of the file corresponding to the page
+    @param: location - a tuple containing (table, range, base/tail, set, page)
+    @return: the page retrieved
+    """
     def retrieve(self, path, location):
        
         # if file not empty
@@ -40,17 +49,16 @@ class Bufferpool:
             page = Page(path, location)
 
         page.dirty = False
-        self.queue_lock.acquire()
         self.pool[location] = page
-        self.queue_lock.release()
 
         return page
 
+    """
+    Evicts the least recently used page and writes the data if the page is dirty
+    """
     def evict(self):
 
-        self.queue_lock.acquire()
         (_, evict_page) = self.pool.popitem()
-        self.queue_lock.release()
         if evict_page.dirty:
             file = open(evict_page.path, "w")
             file.write(str(evict_page.lineage)+'\n')
@@ -61,6 +69,16 @@ class Bufferpool:
             file.write(data_str)
             file.close()  
 
+    """
+    Finds the page and retrieves it to the pool
+    Evicts pages if bufferpool is full
+    @param: table - name of the table
+    @param: r - range index
+    @param: bt - base(0)/tail(1) indicator
+    @param: s - set index
+    @param: pg - page number (column)
+    @return: page retrieved into pool
+    """
     def find_page(self, table, r, bt, s, pg):
         if not self.pool.__contains__((table, r, bt, s, pg)):
             if len(self.pool) == Config.POOL_MAX_LEN:
@@ -75,10 +93,8 @@ class Bufferpool:
 
         else: # bring page to the most recent slot
             page = self.pool[(table, r, bt, s, pg)]
-            self.queue_lock.acquire()
             self.pool.pop((table, r, bt, s, pg))
             self.pool[(table, r, bt, s, pg)] = page
-            self.queue_lock.release()
             return page
             
 
