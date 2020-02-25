@@ -1,7 +1,8 @@
 from lstore.table import Table
-import os, sys, json
-from collections import defaultdict
+import os, sys, json, threading
+from collections import defaultdict, OrderedDict
 from lstore.page import *
+
 
 class Bufferpool:
 
@@ -9,9 +10,12 @@ class Bufferpool:
         self.db = db
         self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
         self.used = []
-        self.pool = [Page("", ()) for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
+        #self.pool = [Page("", ()) for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
         self.directory = defaultdict(lambda: -1)
+        self.queue_lock = threading.Lock()
+        self.pool = OrderedDict(lambda:-1)
 
+    """
     def flush_pool(self):
         for page in self.pool:
             if page.dirty:
@@ -40,15 +44,19 @@ class Bufferpool:
             page = Page(path, location)
 
         page.dirty = False
+        self.queue_lock.acquire()
         empty_index = self.empty.pop()
         self.used.append(empty_index)
+        self.queue_lock.release()
         self.pool[empty_index] = page
 
         return empty_index
 
     def evict(self):
+        self.queue_lock.acquire()
         evict_index = self.used.pop(0)
         self.empty.append(evict_index)
+        self.queue_lock.release()
 
         if self.pool[evict_index].dirty:
             file = open(self.pool[evict_index].path, "w")
@@ -60,7 +68,9 @@ class Bufferpool:
             file.write(data_str)
             file.close()
 
+        self.queue_lock.acquire()
         del self.directory[self.pool[evict_index].location]
+        self.queue_lock.release()
 
     def find_index(self, table, range, bt, set, page):
         i = self.directory[(table, range, bt, set, page)]
@@ -77,6 +87,73 @@ class Bufferpool:
             self.directory.update({(table, range, bt, set, page): i})
         
         return i
+    """
+
+    def flush_pool(self):
+        for key in self.pool:
+            if self.pool[key].dirty:
+                file = open(self.pool[key].path, "w")
+                data_str = ""
+                for i in range(self.pool[key].num_records):
+                    data_str += str(int.from_bytes(self.pool[key].read(i), sys.byteorder)) + " "
+
+                file.write(str(self.pool[key].lineage)+'\n')
+                file.write(data_str)
+                file.close()
+
+    def retrieve(self, path, location):
+       
+        # if file not empty
+        if os.stat(path).st_size > 0:
+            file = open(path, "r")
+            data_str = file.readlines()
+            data_lst = data_str[1].split() # we always store a line
+            file.close()
+            data = [int(i) for i in data_lst]
+            page = Page(path, location)
+            page.lineage = int(data_str[0])
+            for i in range(len(data)):
+                page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        else:
+            page = Page(path, location)
+
+        page.dirty = False
+        self.queue_lock.acquire()
+        self.pool[location] = page
+        self.queue_lock.release()
+
+        return page
+
+    def evict(self):
+
+        self.queue_lock.acquire()
+        evict_page = self.pool.pop()
+        self.queue_lock.release()
+        if evict_page.dirty:
+            file = open(evict_page.path, "w")
+            file.write(str(evict_page.lineage)+'\n')
+            data_str = ""
+            for i in range(evict_page.num_records):
+                data_str += str(int.from_bytes(evict_page.read(i), sys.byteorder)) + " "
+
+            file.write(data_str)
+            file.close()  
+
+    def find_page(self, table, r, bt, s, page):
+        page = self.pool[(table, r, bt, s, page)]
+        if page == -1:
+            if len(self.pool) == Config.POOL_MAX_LEN:
+                self.evict()
+            path = os.getcwd() + '/r_' + str(range) + '/' + str(bt) 
+            if bt == 0 and page == 0:
+                path += '/indirection.txt'
+            else:
+                path += '/s_' + str(set) + '/p_' + str(page) + '.txt'
+            page = self.retrieve(path, (table, range, bt, set, page))
+
+        return page
+            
+
 
 
 class Database():

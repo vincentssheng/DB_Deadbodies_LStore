@@ -183,7 +183,7 @@ class Query:
         return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
 
 
-    def select(self, key, query_columns):
+    def select(self, key, column, query_columns):
         # need to make sure key is available
         if key not in self.table.key_directory.keys():
             # error, cannot find a key that does NOT exist

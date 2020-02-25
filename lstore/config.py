@@ -6,7 +6,7 @@ class Config:
     # Constants in terms of memory
     PAGE_SIZE = 2048 # size of one page 2^12 KB
     ENTRY_SIZE = 8 # size of entry in KB corresponding to one column of a record 2^3 KB
-    POOL_SIZE = 20480
+    POOL_SIZE = 409600
     POOL_MAX_LEN = int(POOL_SIZE/PAGE_SIZE) #
 
     # Constants in terms of number of records
@@ -28,4 +28,4 @@ class Config:
     TAIL_INDEX = 1
     TODO_VALUE_TIMESTAMP = 420
 
-    MERGE_INTERVAL = 2 # second(s)
+    MERGE_INTERVAL = 0.01 # second(s)

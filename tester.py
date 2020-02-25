@@ -3,7 +3,7 @@ from lstore.query import Query
 from lstore.config import Config
 
 from random import choice, randint, sample, seed
-from colorama import Fore, Back, Style
+#from colorama import Fore, Back, Style
 
 # Student Id and 4 grades
 Config()
@@ -26,7 +26,7 @@ for i in range(0, 1000):
 
 
 for key in records:
-    record = query.select(key, [1, 1, 1, 1, 1])[0]
+    record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
     error = False
     for i, column in enumerate(record.columns):
         if column != records[key][i]:
@@ -44,7 +44,7 @@ for key in records:
         original = records[key].copy()
         records[key][i] = value
         query.update(key, *updated_columns)
-        record = query.select(key, [1, 1, 1, 1, 1])[0]
+        record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
         error = False
         for j, column in enumerate(record.columns):
             if column != records[key][j]:
@@ -54,6 +54,7 @@ for key in records:
         else:
             print('update on', original, 'and', updated_columns, ':', record.columns) 
         updated_columns[i] = None
+print("update donex")
 
 keys = sorted(list(records.keys()))
 for c in range(0, grades_table.num_columns):
