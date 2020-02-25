@@ -139,7 +139,8 @@ class Database():
                         self.bufferpool, meta_dict['latest_range'], 
                         meta_dict['base_rid'], meta_dict['tail_rid'], 
                         meta_dict['tail_tracker'],
-                        meta_dict['merge_tracker'], meta_dict['base_tracker'])
+                        meta_dict['merge_tracker'], meta_dict['base_tracker'],
+                        method='get')
         self.tables.update({name: table})
         return table
 

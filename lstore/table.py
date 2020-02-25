@@ -22,7 +22,7 @@ class Table:
     def __init__(self, name, key, num_columns, 
                     bufferpool, latest_range_index, base_current_rid, 
                     tail_current_rid, tail_tracker, 
-                    merge_tracker, base_tracker):
+                    merge_tracker, base_tracker, method='create', verbose=False):
         
         self.name = name
         self.key = key
@@ -38,32 +38,38 @@ class Table:
         self.merge_tracker = merge_tracker
         self.base_tracker = base_tracker
         self.pd_lock = threading.Lock()
+        self.verbose = verbose
+
+        if not os.path.exists(os.getcwd() + "/" + name):
+            os.makedirs(name)
+        os.chdir(name)
+
+        if method == 'get':
+            pgdir_file = os.getcwd() + "/pgdir.json"
+            if not os.path.exists(pgdir_file):
+                file = open(pgdir_file, "w+")
+                file.close()
+            else:
+                with open(pgdir_file, "rb") as fp:
+                    pgdir_data = json.loads(fp.read())
+                    self.page_directory = {int(k):v for k,v in pgdir_data.items()}
+                fp.close()
+            
+            keydir_file = os.getcwd() + "/keydir.json"
+            if not os.path.exists(keydir_file):
+                file = open(keydir_file, "w+")
+                file.close()
+            else:
+                with open(keydir_file, "rb") as fp:
+                    key_data = json.loads(fp.read())
+                    self.key_directory = {int(k):v for k,v in key_data.items()}
+                fp.close()
 
         # Background thread stuff
         self.interval = Config.MERGE_INTERVAL
         self.thread = threading.Thread(target=self.__merge, args=())
         self.thread.daemon = True
         self.thread.start()
-
-        if not os.path.exists(os.getcwd() + "/" + name):
-            os.makedirs(name)
-        os.chdir(name)
-
-        pgdir_file = os.getcwd() + "/pgdir.json"
-        file = open(pgdir_file, "w+")
-        file.close()
-        if os.stat(pgdir_file).st_size > 0:
-            with open(pgdir_file, "rb") as fp:
-                self.page_directory = json.loads(fp.read())
-            fp.close()
-        
-        keydir_file = os.getcwd() + "/keydir.json"
-        file = open(keydir_file, "w+")
-        file.close()
-        if os.stat(keydir_file).st_size > 0:
-            with open(keydir_file, "rb") as fp:
-                self.key_directory = json.loads(fp.read())
-            fp.close()
 
     def unload_meta(self):
 
@@ -156,13 +162,14 @@ class Table:
             tp = [[] for i in range(len(self.merge_tracker))] # Pages is the list of tail pages
             consolidated_bp = []
 
-            print("Merge Tracker")
-            print(self.merge_tracker)
-            print("Tail Tracker")
-            print(self.tail_tracker)
-            print("Merge Queue")
-            print(mergeQ)
-            print("==================================")
+            if self.verbose:
+                print("Merge Tracker")
+                print(self.merge_tracker)
+                print("Tail Tracker")
+                print(self.tail_tracker)
+                print("Merge Queue")
+                print(mergeQ)
+                print("==================================")
 
             # Check each tail page's capacity and insert into merge queue if the tail page is full
             for (i, set) in enumerate(self.merge_tracker):
