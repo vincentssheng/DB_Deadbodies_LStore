@@ -179,26 +179,59 @@ class Query:
 
     def select(self, key, column, query_columns):
         # need to make sure key is available
-        if key not in self.table.key_directory.keys():
-            # error, cannot find a key that does NOT exist
-            return None
+        if column == 0:
+            if key not in self.table.key_directory.keys():
+                # error, cannot find a key that does NOT exist
+                return None
 
-        # find base record physical location
-        (range_index, set_index, offset) = self.table.key_directory[key]
+            # find base record physical location
+            (range_index, set_index, offset) = self.table.key_directory[key]
 
-        record_info = []
+            record_info = []
 
-        for i in range(len(query_columns)):
-            if query_columns[i] == 1:
-                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
-            else:
-                record_info.append('None')
-        
-        rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
-        rid_page.pin_count += 1
-        rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
-        rid_page.pin_count -= 1
-        return [Record(rid, key, tuple(record_info))]
+            for i in range(len(query_columns)):
+                if query_columns[i] == 1:
+                    record_info.append(self.get_latest_val(range_index, set_index, offset, i))
+                else:
+                    record_info.append('None')
+            
+            rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+            rid_page.pin_count += 1
+            rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
+            rid_page.pin_count -= 1
+            return [Record(rid, key, tuple(record_info))]
+        else:
+            record_list = []
+
+            # find base record physical location
+            rids = self.table.index.locate(column, key)
+            
+            if (rids == None):
+                return None  # or None?
+            
+            for rid in rids:
+                record_info = []
+                (range_index, _, set_index, offset) = self.table.page_directory[rid]
+
+                for j in range(len(query_columns)):
+                    if query_columns[j] == 1:
+                        record_info.append(self.get_latest_val(range_index, set_index, offset, j))
+                    else:
+                        record_info.append('None')
+                
+                # this line may not be correct as locate_range returns a list of rids
+                # and the first rid in this list may not be the one we are looking for
+                # also inefficient as have to generate another sortedDict-->traverse everything
+                # rid = self.table.index.locate_range(key, key, column)[0]
+
+                rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+                rid_page.pin_count += 1
+                rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
+                rid_page.pin_count -= 1
+
+                record_list.append(Record(rid, key, tuple(record_info)))
+            
+            return record_list
 
     # Update a record with specified key and columns
     # @param: key - specified key that corresponds to a record which we want to update
