@@ -17,7 +17,6 @@ class Index:
         # put the line below in your tester since user creates index
         # self.create_index(0)
         self.indexes = [sorteddict.SortedDict() for i in range(Config.NUM_META_COLS + self.table.num_columns)]
-        pass
 
     def update(self, column):
         self.drop_index(column)
@@ -29,20 +28,14 @@ class Index:
 
     def locate(self, column, value):
         # traversing sortedDict to find wanted value within specified column
-        self.update(column)
+        # self.update(column)
         
         if (not self.indexes[Config.NUM_META_COLS + column].__contains__(value)) :
             return None
 
         rids = self.indexes[Config.NUM_META_COLS + column].get(value)
-
-        record_locations = []
-
-        for i in range (len(rids)) : 
-            (page_index, _, set_index, offset) = self.table.page_directory[rids[i]]
-            record_locations.append((page_index, set_index, offset))
         
-        return record_locations
+        return rids
 
     """
     Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -50,7 +43,7 @@ class Index:
 
     def locate_range(self, begin, end, column):
         # traverse through sortedDict and find which leaves value would be between
-        self.update(column)
+        # self.update(column)
         cumul_rids = []
 
         for i in range(begin, end + 1) :
@@ -68,24 +61,24 @@ class Index:
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
-        latest_rid_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
-        self.table.bufferpool.pool[latest_rid_index].pin_count += 1
-        latest_rid = int.from_bytes(self.table.bufferpool.pool[latest_rid_index].read(offset), sys.byteorder)
-        self.table.bufferpool.pool[latest_rid_index].pin_count -= 1
+        latest_rid_page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
+        latest_rid_page.pin_count += 1
+        latest_rid = int.from_bytes(latest_rid_page.read(offset), sys.byteorder)
+        latest_rid_page.pin_count -= 1
 
-        if latest_rid > self.table.bufferpool.pool[latest_rid_index].lineage:
+        if latest_rid > latest_rid_page.lineage:
             latest_rid = 0 # read from base page if bp lineage is newer
 
         if latest_rid == 0:
             # read bp
-            col_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
+            col_page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
         else:
             # read the tail record
             # use page directory to get physical location of latest tp
             (range_index, _, set_index, offset) = self.table.page_directory[latest_rid]
-            col_index = self.table.bufferpool.find_index(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
+            col_page = self.table.bufferpool.find_page(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
 
-        return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
+        return int.from_bytes(col_page.read(offset), sys.byteorder)
 
     
     def create_index(self, column_number):
@@ -122,3 +115,4 @@ class Index:
         if (self.indexes[Config.NUM_META_COLS + column_number]) : 
             self.indexes[Config.NUM_META_COLS + column_number].clear()
         pass
+
