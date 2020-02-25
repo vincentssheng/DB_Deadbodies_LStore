@@ -8,96 +8,18 @@ class Bufferpool:
 
     def __init__(self, db):
         self.db = db
-        self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
-        self.used = []
-        #self.pool = [Page("", ()) for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
-        self.directory = defaultdict(lambda: -1)
         self.queue_lock = threading.Lock()
-        self.pool = OrderedDict(lambda:-1)
+        self.pool = OrderedDict()
 
-    """
     def flush_pool(self):
-        for page in self.pool:
+        for _, page in self.pool.copy().items():
             if page.dirty:
                 file = open(page.path, "w")
                 data_str = ""
                 for i in range(page.num_records):
                     data_str += str(int.from_bytes(page.read(i), sys.byteorder)) + " "
 
-                file.write(data_str)
-                file.close()
-    
-    def retrieve(self, path, location):
-       
-        # if file not empty
-        if os.stat(path).st_size > 0:
-            file = open(path, "r")
-            data_str = file.readlines()
-            data_lst = data_str[1].split() # we always store a line
-            file.close()
-            data = [int(i) for i in data_lst]
-            page = Page(path, location)
-            page.lineage = int(data_str[0])
-            for i in range(len(data)):
-                page.write(i, data[i].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-        else:
-            page = Page(path, location)
-
-        page.dirty = False
-        self.queue_lock.acquire()
-        empty_index = self.empty.pop()
-        self.used.append(empty_index)
-        self.queue_lock.release()
-        self.pool[empty_index] = page
-
-        return empty_index
-
-    def evict(self):
-        self.queue_lock.acquire()
-        evict_index = self.used.pop(0)
-        self.empty.append(evict_index)
-        self.queue_lock.release()
-
-        if self.pool[evict_index].dirty:
-            file = open(self.pool[evict_index].path, "w")
-            file.write(str(self.pool[evict_index].lineage)+'\n')
-            data_str = ""
-            for i in range(self.pool[evict_index].num_records):
-                data_str += str(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder)) + " "
-
-            file.write(data_str)
-            file.close()
-
-        self.queue_lock.acquire()
-        del self.directory[self.pool[evict_index].location]
-        self.queue_lock.release()
-
-    def find_index(self, table, range, bt, set, page):
-        i = self.directory[(table, range, bt, set, page)]
-        if i == -1:
-            if len(self.used) == len(self.pool):
-                self.evict()
-            
-            path = os.getcwd() + '/r_' + str(range) + '/' + str(bt) 
-            if bt == 0 and page == 0:
-                path += '/indirection.txt'
-            else:
-                path += '/s_' + str(set) + '/p_' + str(page) + '.txt'
-            i = self.retrieve(path, (table, range, bt, set, page))
-            self.directory.update({(table, range, bt, set, page): i})
-        
-        return i
-    """
-
-    def flush_pool(self):
-        for key in self.pool:
-            if self.pool[key].dirty:
-                file = open(self.pool[key].path, "w")
-                data_str = ""
-                for i in range(self.pool[key].num_records):
-                    data_str += str(int.from_bytes(self.pool[key].read(i), sys.byteorder)) + " "
-
-                file.write(str(self.pool[key].lineage)+'\n')
+                file.write(str(page.lineage)+'\n')
                 file.write(data_str)
                 file.close()
 
@@ -127,7 +49,7 @@ class Bufferpool:
     def evict(self):
 
         self.queue_lock.acquire()
-        evict_page = self.pool.pop()
+        (_, evict_page) = self.pool.popitem()
         self.queue_lock.release()
         if evict_page.dirty:
             file = open(evict_page.path, "w")
@@ -139,19 +61,25 @@ class Bufferpool:
             file.write(data_str)
             file.close()  
 
-    def find_page(self, table, r, bt, s, page):
-        page = self.pool[(table, r, bt, s, page)]
-        if page == -1:
+    def find_page(self, table, r, bt, s, pg):
+        if not self.pool.__contains__((table, r, bt, s, pg)):
             if len(self.pool) == Config.POOL_MAX_LEN:
                 self.evict()
-            path = os.getcwd() + '/r_' + str(range) + '/' + str(bt) 
-            if bt == 0 and page == 0:
+            path = os.getcwd() + '/r_' + str(r) + '/' + str(bt) 
+            if bt == 0 and pg == 0:
                 path += '/indirection.txt'
             else:
-                path += '/s_' + str(set) + '/p_' + str(page) + '.txt'
-            page = self.retrieve(path, (table, range, bt, set, page))
+                path += '/s_' + str(s) + '/p_' + str(pg) + '.txt'
+            page = self.retrieve(path, (table, r, bt, s, pg))
+            return page
 
-        return page
+        else: # bring page to the most recent slot
+            page = self.pool[(table, r, bt, s, pg)]
+            self.queue_lock.acquire()
+            self.pool.pop((table, r, bt, s, pg))
+            self.pool[(table, r, bt, s, pg)] = page
+            self.queue_lock.release()
+            return page
             
 
 

@@ -153,7 +153,7 @@ class Table:
     def __merge(self):
         while True:
             mergeQ = [] # Merge Queue contains indexes of ranges that are ready for merging
-            tp_indexes = [[] for i in range(len(self.merge_tracker))] # Pages is the list of tail pages
+            tp = [[] for i in range(len(self.merge_tracker))] # Pages is the list of tail pages
             consolidated_bp = []
 
             print("Merge Tracker")
@@ -172,21 +172,21 @@ class Table:
                     continue
 
                 # Check capacity of tail page
-                pool_index = self.bufferpool.find_index(self.name, i, 1, set, Config.RID_COLUMN)
-                if self.bufferpool.pool[pool_index].has_capacity():
+                page = self.bufferpool.find_page(self.name, i, 1, set, Config.RID_COLUMN)
+                if page.has_capacity():
                     continue # do not merge non-full pages
 
-                self.bufferpool.pool[pool_index].pin_count += 1 # if we need to do the merge, make sure it stays in pool
-                tp_indexes[i].append(pool_index)
+                page.pin_count += 1 # if we need to do the merge, make sure it stays in pool
+                tp[i].append(page)
                 
                 """
                 if tail page is full and
                 if we have not merged the latest tail page in the range
                 """
                 for j in range(Config.BASE_RID_COLUMN, Config.NUM_META_COLS+self.num_columns):
-                    pool_index = self.bufferpool.find_index(self.name, i, 1, set, j)
-                    self.bufferpool.pool[pool_index].pin_count += 1
-                    tp_indexes[i].append(pool_index) # retrieve all tail pages
+                    page = self.bufferpool.find_page(self.name, i, 1, set, j)
+                    page.pin_count += 1
+                    tp[i].append(page) # retrieve all tail pages
 
                 mergeQ.append(i) # append range index to merge queue
 
@@ -194,29 +194,25 @@ class Table:
             # merge them one set at a time
             while len(mergeQ) > 0:
                 index = mergeQ.pop(0)
-                bp_indexes = []
+                bp = []
                 """
                 for each range's base page
                 merge only if the base page is not full
                 """
-                pool_index = self.bufferpool.find_index(self.name, index, 0, self.base_tracker[index], Config.RID_COLUMN)
-                if self.bufferpool.pool[pool_index].has_capacity(): # if base page is not full, skip
+                page = self.bufferpool.find_page(self.name, index, 0, self.base_tracker[index], Config.RID_COLUMN)
+                if page.has_capacity(): # if base page is not full, skip
                     continue
-                self.bufferpool.pool[pool_index].pin_count += 1
-                bp_indexes = [pool_index]
+                page.pin_count += 1
+                bp.append(page)
 
                 for j in range(Config.TIMESTAMP_COLUMN, Config.NUM_META_COLS+self.num_columns):
                     if (j == Config.SCHEMA_ENCODING_COLUMN) and (j == Config.TIMESTAMP_COLUMN) and (j == Config.BASE_RID_COLUMN):
                         continue # we don't read the SE, Timestamp and BASE RID columns for merge
-                    pool_index = self.bufferpool.find_index(self.name, index, 0, self.base_tracker[index], j)
-                    self.bufferpool.pool[pool_index].pin_count += 1
-                    bp_indexes.append(pool_index)
+                    page = self.bufferpool.find_page(self.name, index, 0, self.base_tracker[index], j)
+                    page.pin_count += 1
+                    bp.append(page)
 
-                # Construct list of pages pointing to the bufferpool
-                bp = [self.bufferpool.pool[bp_indexes[i]] for i in range(len(bp_indexes))]
-                tp = [self.bufferpool.pool[tp_indexes[index][i]] for i in range(len(tp_indexes[index]))]
-
-                consolidated_bp = self.merge(bp, tp)
+                consolidated_bp = self.merge(bp, tp[index])
 
                 # Create files and write to disk at the end of merge cycle
                 self.base_tracker[index] += 1
@@ -237,7 +233,7 @@ class Table:
                 # remove pins on pages used during merge cycle
                 for page in bp:
                     page.pin_count -= 1
-                for page in tp:
+                for page in tp[index]:
                     page.pin_count -= 1
 
                 # Swap consolidated page into page directory
