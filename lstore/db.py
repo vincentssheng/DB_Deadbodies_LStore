@@ -57,8 +57,11 @@ class Bufferpool:
     Evicts the least recently used page and writes the data if the page is dirty
     """
     def evict(self):
+        (key, evict_page) = self.pool.popitem()
+        while evict_page.pin_count > 0:
+            self.pool[key] = evict_page
+            (key, evict_page) = self.pool.popitem()
 
-        (_, evict_page) = self.pool.popitem()
         if evict_page.dirty:
             file = open(evict_page.path, "w")
             file.write(str(evict_page.lineage)+'\n')
