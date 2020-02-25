@@ -36,7 +36,6 @@ class Index:
             record_locations.append((page_index, set_index, offset))
         
         return record_locations
-        pass
 
     """
     Returns the RIDs of all records with values in column "column" between "begin" and "end"

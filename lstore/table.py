@@ -40,8 +40,9 @@ class Table:
         self.pd_lock = threading.Lock()
         self.verbose = verbose
 
-        if not os.path.exists(os.getcwd() + "/" + name):
-            os.makedirs(name)
+        if method == 'create':
+            if not os.path.exists(os.getcwd() + "/" + name):
+                os.makedirs(name)
         os.chdir(name)
 
         if method == 'get':
@@ -64,10 +65,6 @@ class Table:
                     key_data = json.loads(fp.read())
                     self.key_directory = {int(k):v for k,v in key_data.items()}
                 fp.close()
-
-        if not os.path.exists(os.getcwd() + "/" + name):
-            os.makedirs(name)
-        os.chdir(name)
 
         if method == 'get':
             pgdir_file = os.getcwd() + "/pgdir.json"

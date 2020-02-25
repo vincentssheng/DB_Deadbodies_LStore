@@ -103,6 +103,7 @@ class Query:
             # delete from page directory
             self.table.pd_lock.acquire()
             del self.table.page_directory[indirection]
+            self.table.pd_lock.release()
             ind_page = self.table.bufferpool.find_page(self.table.name, next_range, 1, next_set, Config.INDIRECTION_COLUMN) 
             indirection = int.from_bytes(ind_page.read(next_offset), sys.byteorder)
 
@@ -189,10 +190,25 @@ class Query:
             return None
 
         # find base record physical location
+        (range_index, set_index, offset) = self.table.key_directory[key]
+
+        record_info = []
+
+        for i in range(len(query_columns)):
+            if query_columns[i] == 1:
+                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
+            else:
+                record_info.append('None')
+
+        """ 
+        TODO: VIVIENNE AND JENNA PLEASE FIX THIS
+        # find base record physical location
         record_locations = self.table.index.locate(column, key)
-        
+        record_list = []
+
         if (record_locations == None):
             return record_list  # or None?
+        """
         
         rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
         rid_page.pin_count += 1
@@ -305,6 +321,8 @@ class Query:
                     file.close()
 
             rid_page.pin_count -= 1
+            
+        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
         self.table.pd_lock.release()
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
