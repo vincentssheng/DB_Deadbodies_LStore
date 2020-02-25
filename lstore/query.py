@@ -52,25 +52,25 @@ class Query:
     """
     def write_to_page(self, range, bt, set, offset, indirection, schema_encoding, base_rid, record):
 
-        page = self.table.bufferpool.find_page(self.table.name, range, bt, set, Config.INDIRECTION_COLUMN)
-        page.write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.INDIRECTION_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, indirection.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
         
-        page = self.table.bufferpool.find_page(self.table.name, range, bt, set, Config.RID_COLUMN)
-        page.write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.RID_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
-        page = self.table.bufferpool.find_page(self.table.name, range, bt, set, Config.TIMESTAMP_COLUMN)
-        page.write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.TIMESTAMP_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, int(time.mktime(datetime.now().timetuple())).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
-        page = self.table.bufferpool.find_page(self.table.name, range, bt, set, Config.SCHEMA_ENCODING_COLUMN)
-        page.write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.SCHEMA_ENCODING_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, schema_encoding.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
-        page = self.table.bufferpool.find_page(self.table.name, range, bt, set, Config.BASE_RID_COLUMN)
-        page.write(offset, base_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        i = self.table.bufferpool.find_index(self.table.name, range, bt, set, Config.BASE_RID_COLUMN)
+        self.table.bufferpool.pool[i].write(offset, base_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         j = 0
         while j < self.table.num_columns:
-            page = self.table.bufferpool.find_page(self.table.name, range, bt, set, j+Config.NUM_META_COLS)
-            page.write(offset, record.columns[j].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+            index = self.table.bufferpool.find_index(self.table.name, range, bt, set, j+Config.NUM_META_COLS)
+            self.table.bufferpool.pool[index].write(offset, record.columns[j].to_bytes(Config.ENTRY_SIZE, sys.byteorder))
             j += 1
             
     
@@ -81,19 +81,17 @@ class Query:
 
         # Get location in read info from base record
         (range_index, set_index, offset) = self.table.key_directory[key]
-        ind_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
-        indirection = int.from_bytes(ind_page.read(offset), sys.byteorder)
-        rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN) 
-        base_rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
+        ind_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
+        indirection = int.from_bytes(self.table.bufferpool.pool[ind_index].read(offset), sys.byteorder)
+        rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN) 
+        base_rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
-        self.table.pd_lock.acquire()
         del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
-        self.table.pd_lock.release()
 
         # delete base record
-        rid_page.write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+        self.table.bufferpool.pool[rid_index].write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # Track down tail records associated to the base record that is deleted
         while indirection > 0:
@@ -101,15 +99,13 @@ class Query:
             (next_range, _, next_set, next_offset) = self.table.page_directory[indirection]
 
             # delete from page directory
-            self.table.pd_lock.acquire()
             del self.table.page_directory[indirection]
-            self.table.pd_lock.release()
-            ind_page = self.table.bufferpool.find_page(self.table.name, next_range, 1, next_set, Config.INDIRECTION_COLUMN) 
-            indirection = int.from_bytes(ind_page.read(next_offset), sys.byteorder)
+            ind_index = self.table.bufferpool.find_index(self.table.name, next_range, 1, next_set, Config.INDIRECTION_COLUMN) 
+            indirection = int.from_bytes(self.table.bufferpool.pool[ind_index].read(next_offset), sys.byteorder)
 
             # invalidate record
-            rid_page = self.table.bufferpool.find_page(self.table.name, next_range, 1, next_set, Config.RID_COLUMN) 
-            rid_page.write(next_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
+            rid_index = self.table.bufferpool.find_index(self.table.name, next_range, 1, next_set, Config.RID_COLUMN) 
+            self.table.bufferpool.pool[rid_index].write(next_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
 
      
 
@@ -127,10 +123,8 @@ class Query:
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
         # store physical location in page directory
-        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (range_index, 0, set_index, offset)}) 
         self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
-        self.table.pd_lock.release()
 
         # Create new range?
         if range_index > self.table.latest_range_index:
@@ -154,6 +148,12 @@ class Query:
                 file = open(path + "/p_" + str(i) + ".txt", "w+")
                 file.close()
 
+            pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, range_index, 0, set_index, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
+
+            for i in range(len(pages)):
+                index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, i)
+                self.table.bufferpool.pool[index] = pages[i]
+
         self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record.rid, record) # writing to page
 
     # Select records from database
@@ -163,58 +163,58 @@ class Query:
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
-        latest_rid_page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
-        latest_rid_page.pin_count += 1
-        latest_rid = int.from_bytes(latest_rid_page.read(offset), sys.byteorder)
-        latest_rid_page.pin_count -= 1
+        latest_rid_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
+        self.table.bufferpool.pool[latest_rid_index].pin_count += 1
+        latest_rid = int.from_bytes(self.table.bufferpool.pool[latest_rid_index].read(offset), sys.byteorder)
+        self.table.bufferpool.pool[latest_rid_index].pin_count -= 1
 
-        if latest_rid > latest_rid_page.lineage:
+        if latest_rid > self.table.bufferpool.pool[latest_rid_index].lineage:
             latest_rid = 0 # read from base page if bp lineage is newer
 
         if latest_rid == 0:
             # read bp
-            page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
+            col_index = self.table.bufferpool.find_index(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
         else:
             # read the tail record
             # use page directory to get physical location of latest tp
             (range_index, _, set_index, offset) = self.table.page_directory[latest_rid]
-            page = self.table.bufferpool.find_page(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
+            col_index = self.table.bufferpool.find_index(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
 
-        return int.from_bytes(page.read(offset), sys.byteorder)
+        return int.from_bytes(self.table.bufferpool.pool[col_index].read(offset), sys.byteorder)
 
 
     def select(self, key, column, query_columns):
-        # need to make sure key is available
-        if key not in self.table.key_directory.keys():
-            # error, cannot find a key that does NOT exist
-            return None
-
-        # find base record physical location
-        (range_index, set_index, offset) = self.table.key_directory[key]
-
-        record_info = []
-
-        for i in range(len(query_columns)):
-            if query_columns[i] == 1:
-                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
-            else:
-                record_info.append('None')
-
-        """ 
-        TODO: VIVIENNE AND JENNA PLEASE FIX THIS
-        # find base record physical location
-        record_locations = self.table.index.locate(column, key)
         record_list = []
 
+        # find base record physical location
+        record_locations = self.table.index.locate(column, key)
+        
         if (record_locations == None):
             return record_list  # or None?
-        """
         
-        rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
-        rid_page.pin_count += 1
-        rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
-        rid_page.pin_count -= 1
-        return [Record(rid, key, tuple(record_info))]
+        for i in range(len(record_locations)):
+            record_info = []
+            (range_index, set_index, offset) = record_locations[i]
+
+            for j in range(len(query_columns)):
+                if query_columns[j] == 1:
+                    record_info.append(self.get_latest_val(range_index, set_index, offset, j))
+                else:
+                    record_info.append('None')
+            
+            # this line may not be correct as locate_range returns a list of rids
+            # and the first rid in this list may not be the one we are looking for
+            # also inefficient as have to generate another sortedDict-->traverse everything
+            # rid = self.table.index.locate_range(key, key, column)[0]
+
+            rid_index = self.table.bufferpool.find_index(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+            self.table.bufferpool.pool[rid_index].pin_count += 1
+            rid = int.from_bytes(self.table.bufferpool.pool[rid_index].read(offset), sys.byteorder)
+            self.table.bufferpool.pool[rid_index].pin_count -= 1
+
+            record_list.append(Record(rid, key, tuple(record_info)))
+        
+        return record_list
 
         
     # Update a record with specified key and columns
@@ -241,22 +241,17 @@ class Query:
             os.makedirs(path)
 
         # Base RID (1)
-        base_rid_page = self.table.bufferpool.find_page(self.table.name, base_range, 0, base_set, Config.RID_COLUMN)
-        base_rid_page.pin_count += 1
-        base_rid = int.from_bytes(base_rid_page.read(base_offset), sys.byteorder)
-        base_rid_page.pin_count -= 1
+        base_rid_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.RID_COLUMN)
+        base_rid = int.from_bytes(self.table.bufferpool.pool[base_rid_index].read(base_offset), sys.byteorder)
         
         # Base Indirection (0)
-        base_ind_page = self.table.bufferpool.find_page(self.table.name, base_range, 0, base_set, Config.INDIRECTION_COLUMN)
-        base_ind_page.pin_count += 1
-        base_ind = int.from_bytes(base_ind_page.read(base_offset), sys.byteorder)
-        base_ind_page.write(base_offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-        base_ind_page.pin_count -= 1
+        base_indirection_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.INDIRECTION_COLUMN)
+        base_ind = int.from_bytes(self.table.bufferpool.pool[base_indirection_index].read(base_offset), sys.byteorder)
+        self.table.bufferpool.pool[base_indirection_index].write(base_offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # Base SE (3)
-        base_SE_page = self.table.bufferpool.find_page(self.table.name, base_range, 0, base_set, Config.SCHEMA_ENCODING_COLUMN)
-        base_SE_page.pin_count += 1
-        base_SE = int.from_bytes(base_SE_page.read(base_offset), sys.byteorder)
+        base_SE_index = self.table.bufferpool.find_index(self.table.name, base_range, 0, base_set, Config.SCHEMA_ENCODING_COLUMN)
+        base_SE = int.from_bytes(self.table.bufferpool.pool[base_SE_index].read(base_offset), sys.byteorder)
         # write indirection to base page and update base record schema encoding
         base_schema = self.int_to_schema(base_SE)
         result_schema = ""
@@ -265,8 +260,7 @@ class Query:
                 result_schema += '1'
             else:
                 result_schema += '0'
-        base_SE_page.write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
-        base_SE_page.pin_count -= 1
+        self.table.bufferpool.pool[base_SE_index].write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
         # Get information from latest updated record
         non_updated_values = []
@@ -279,10 +273,8 @@ class Query:
             prev_offset = base_offset
         for i in range(self.table.num_columns):
             if new_schema[i] == '0':
-                page = self.table.bufferpool.find_page(self.table.name, prev_range, prev_bt, prev_set, i+Config.NUM_META_COLS)
-                page.pin_count += 1
-                value = int.from_bytes(page.read(prev_offset), sys.byteorder)
-                page.pin_count -= 1
+                index = self.table.bufferpool.find_index(self.table.name, prev_range, prev_bt, prev_set, i+Config.NUM_META_COLS)
+                value = int.from_bytes(self.table.bufferpool.pool[index].read(prev_offset), sys.byteorder)
                 non_updated_values.append(value)
         count = 0
         new_columns = []
@@ -301,30 +293,32 @@ class Query:
                 os.makedirs(path)
             self.table.tail_tracker[base_range] = 0
             tail_offset = 0
-            for i in range(self.table.num_columns+Config.NUM_META_COLS):
+            pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, 0, i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
+            for i in range(len(pages)):
                 file = open(path + "/p_" + str(i) + ".txt", "w+")
                 file.close()
-
+                index = self.table.bufferpool.find_index(self.table.name, base_range, 1, 0, i)
+                self.table.bufferpool.pool[index] = pages[i]
         else: # if tail page has been created
-            rid_page = self.table.bufferpool.find_page(self.table.name, base_range, 1, self.table.tail_tracker[base_range], 0)
-            rid_page.pin_count += 1
-            if rid_page.has_capacity():
-                tail_offset = rid_page.num_records
+            index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], 0)
+            if self.table.bufferpool.pool[index].has_capacity():
+                tail_offset = self.table.bufferpool.pool[index].num_records
+                for i in range(1, Config.NUM_META_COLS+self.table.num_columns):
+                    _ = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
             else:
                 self.table.tail_tracker[base_range] += 1
                 tail_offset = 0
                 path = os.getcwd() + '/r_' + str(base_range) + '/1/s_' + str(self.table.tail_tracker[base_range])
                 if not os.path.exists(path):
                     os.makedirs(path)
-                for i in range(self.table.num_columns+Config.NUM_META_COLS):
+                pages = [Page(path+"/p_"+str(i)+".txt", (self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)) for i in range(self.table.num_columns+Config.NUM_META_COLS)]
+                for i in range(len(pages)):
                     file = open(path+"/p_"+str(i)+".txt", 'w+')
                     file.close()
+                    index = self.table.bufferpool.find_index(self.table.name, base_range, 1, self.table.tail_tracker[base_range], i)
+                    self.table.bufferpool.pool[index] = pages[i]
 
-            rid_page.pin_count -= 1
-            
-        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
-        self.table.pd_lock.release()
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
 
     """
@@ -335,16 +329,14 @@ class Query:
     
     def sum(self, start_range, end_range, aggregate_column_index):
         # need to make sure key is available
-        while start_range not in self.table.key_directory.keys():
-            start_range += 1
-
-        while end_range not in self.table.key_directory.keys():
-            end_range -= 1
+        if (start_range not in self.table.key_directory.keys() or end_range not in self.table.key_directory.keys()):
+            # error, cannot find a key that does NOT exist
+            return 0
 
         (range_index, set_index, offset) = self.table.key_directory[start_range]
         sum = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
 
-        while (start_range < end_range):
+        while (start_range != end_range):
             start_range += 1
 
             # check if new key exists in dictionary
@@ -353,6 +345,7 @@ class Query:
             
             # get physical location
             (range_index, set_index, offset) = self.table.key_directory[start_range]
-            retval = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
-            sum += retval
+
+            sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
+    
         return sum
