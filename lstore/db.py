@@ -1,28 +1,28 @@
 from lstore.table import Table
-import os, sys, json
-from collections import defaultdict
+import os, sys, json, threading
+from collections import defaultdict, OrderedDict
 from lstore.page import *
+
 
 class Bufferpool:
 
     def __init__(self, db):
         self.db = db
-        self.empty = [i for i in range(Config.POOL_MAX_LEN)]  
-        self.used = []
-        self.pool = [Page("", ()) for i in range(Config.POOL_MAX_LEN)] # Create empty shell pages
-        self.directory = defaultdict(lambda: -1)
+        self.queue_lock = threading.Lock()
+        self.pool = OrderedDict()
 
     def flush_pool(self):
-        for page in self.pool:
+        for _, page in self.pool.copy().items():
             if page.dirty:
                 file = open(page.path, "w")
                 data_str = ""
                 for i in range(page.num_records):
                     data_str += str(int.from_bytes(page.read(i), sys.byteorder)) + " "
 
+                file.write(str(page.lineage)+'\n')
                 file.write(data_str)
                 file.close()
-    
+
     def retrieve(self, path, location):
        
         # if file not empty
@@ -40,43 +40,48 @@ class Bufferpool:
             page = Page(path, location)
 
         page.dirty = False
-        empty_index = self.empty.pop()
-        self.used.append(empty_index)
-        self.pool[empty_index] = page
+        self.queue_lock.acquire()
+        self.pool[location] = page
+        self.queue_lock.release()
 
-        return empty_index
+        return page
 
     def evict(self):
-        evict_index = self.used.pop(0)
-        self.empty.append(evict_index)
 
-        if self.pool[evict_index].dirty:
-            file = open(self.pool[evict_index].path, "w")
-            file.write(str(self.pool[evict_index].lineage)+'\n')
+        self.queue_lock.acquire()
+        (_, evict_page) = self.pool.popitem()
+        self.queue_lock.release()
+        if evict_page.dirty:
+            file = open(evict_page.path, "w")
+            file.write(str(evict_page.lineage)+'\n')
             data_str = ""
-            for i in range(self.pool[evict_index].num_records):
-                data_str += str(int.from_bytes(self.pool[evict_index].read(i), sys.byteorder)) + " "
+            for i in range(evict_page.num_records):
+                data_str += str(int.from_bytes(evict_page.read(i), sys.byteorder)) + " "
 
             file.write(data_str)
-            file.close()
+            file.close()  
 
-        del self.directory[self.pool[evict_index].location]
-
-    def find_index(self, table, range, bt, set, page):
-        i = self.directory[(table, range, bt, set, page)]
-        if i == -1:
-            if len(self.used) == len(self.pool):
+    def find_page(self, table, r, bt, s, pg):
+        if not self.pool.__contains__((table, r, bt, s, pg)):
+            if len(self.pool) == Config.POOL_MAX_LEN:
                 self.evict()
-            
-            path = os.getcwd() + '/r_' + str(range) + '/' + str(bt) 
-            if bt == 0 and page == 0:
+            path = os.getcwd() + '/r_' + str(r) + '/' + str(bt) 
+            if bt == 0 and pg == 0:
                 path += '/indirection.txt'
             else:
-                path += '/s_' + str(set) + '/p_' + str(page) + '.txt'
-            i = self.retrieve(path, (table, range, bt, set, page))
-            self.directory.update({(table, range, bt, set, page): i})
-        
-        return i
+                path += '/s_' + str(s) + '/p_' + str(pg) + '.txt'
+            page = self.retrieve(path, (table, r, bt, s, pg))
+            return page
+
+        else: # bring page to the most recent slot
+            page = self.pool[(table, r, bt, s, pg)]
+            self.queue_lock.acquire()
+            self.pool.pop((table, r, bt, s, pg))
+            self.pool[(table, r, bt, s, pg)] = page
+            self.queue_lock.release()
+            return page
+            
+
 
 
 class Database():
@@ -136,7 +141,6 @@ class Database():
                         meta_dict['tail_tracker'],
                         meta_dict['merge_tracker'], meta_dict['base_tracker'],
                         method='get')
-        print(os.getcwd())
         self.tables.update({name: table})
         return table
 

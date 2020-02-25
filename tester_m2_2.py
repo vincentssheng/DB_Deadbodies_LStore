@@ -6,6 +6,7 @@ from random import choice, randint, sample, seed
 # Student Id and 4 grades
 db = Database()
 db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/data")
+#db.open('~/ECS165A')
 grades_table = db.get_table('Grades')
 query = Query(grades_table)
 
