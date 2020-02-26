@@ -16,7 +16,7 @@ class Index:
         # DEFAULT : primary_key (SID column)
         # put the line below in your tester since user creates index
         # self.create_index(0)
-        self.indexes = [sorteddict.SortedDict() for i in range(Config.NUM_META_COLS + self.table.num_columns)]
+        self.indexes = [sorteddict.SortedDict() for i in range(self.table.num_columns)]
 
     def update(self, column):
         self.drop_index(column)
@@ -30,10 +30,10 @@ class Index:
         # traversing sortedDict to find wanted value within specified column
         # self.update(column)
         
-        if (not self.indexes[Config.NUM_META_COLS + column].__contains__(value)) :
+        if (not self.indexes[column].__contains__(value)) :
             return None
 
-        rids = self.indexes[Config.NUM_META_COLS + column].get(value)
+        rids = self.indexes[column].get(value)
         
         return rids
 
@@ -47,10 +47,10 @@ class Index:
         cumul_rids = []
 
         for i in range(begin, end + 1) :
-            if (not self.indexes[Config.NUM_META_COLS + column].__contains__(i)) :
+            if (not self.indexes[column].__contains__(i)) :
                 continue
 
-            rid_list = self.indexes[Config.NUM_META_COLS + column].get(i)
+            rid_list = self.indexes[column].get(i)
             cumul_rids += rid_list
                 
         return cumul_rids
@@ -97,13 +97,13 @@ class Index:
 
             column_val = self.get_latest_val(page_index, set_index, offset, column_number)
             # insert value into sortedDict
-            if (self.indexes[Config.NUM_META_COLS + column_number].__contains__(column_val)):
-                rid_list = self.indexes[Config.NUM_META_COLS + column_number].get(column_val)
+            if (self.indexes[column_number].__contains__(column_val)):
+                rid_list = self.indexes[column_number].get(column_val)
                 rid_list.append(rid)
-                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: rid_list})
+                self.indexes[column_number].update({column_val: rid_list})
             else :
-                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: [rid]})
-        #print(self.indexes[Config.NUM_META_COLS + column_number])
+                self.indexes[column_number].update({column_val: [rid]})
+        #print(self.indexes[column_number])
         pass
 
 
@@ -112,7 +112,7 @@ class Index:
     """
 
     def drop_index(self, column_number):
-        if (self.indexes[Config.NUM_META_COLS + column_number]) : 
-            self.indexes[Config.NUM_META_COLS + column_number].clear()
+        if (self.indexes[column_number]) : 
+            self.indexes[column_number].clear()
         pass
 
