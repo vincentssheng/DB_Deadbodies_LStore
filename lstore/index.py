@@ -85,24 +85,25 @@ class Index:
         # populate sortedDict here based on column - insertion
         # note: column_number = primary key column (like SID)
 
-        # traverse through all the existing records 
-        for i in range (self.table.base_current_rid) :
-            rid = i + 1  # RID cannever be 0
-            if rid not in self.table.page_directory.keys():
-                # error, RID does NOT exist
-                continue
+        # we only create keys for non primary keys
+        if column_number != self.table.key:
+            for i in range (self.table.base_current_rid) :
+                rid = i + 1  # RID cannever be 0
+                if rid not in self.table.page_directory.keys():
+                    # error, RID does NOT exist
+                    continue
 
-            # find base record physical location
-            (page_index, _, set_index, offset) = self.table.page_directory[rid]
+                # find base record physical location
+                (page_index, _, set_index, offset) = self.table.page_directory[rid]
 
-            column_val = self.get_latest_val(page_index, set_index, offset, column_number)
-            # insert value into sortedDict
-            if (self.indexes[Config.NUM_META_COLS + column_number].__contains__(column_val)):
-                rid_list = self.indexes[Config.NUM_META_COLS + column_number].get(column_val)
-                rid_list.append(rid)
-                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: rid_list})
-            else :
-                self.indexes[Config.NUM_META_COLS + column_number].update({column_val: [rid]})
+                column_val = self.get_latest_val(page_index, set_index, offset, column_number)
+                # insert value into sortedDict
+                if (self.indexes[Config.NUM_META_COLS + column_number].__contains__(column_val)):
+                    rid_list = self.indexes[Config.NUM_META_COLS + column_number].get(column_val)
+                    rid_list.append(rid)
+                    self.indexes[Config.NUM_META_COLS + column_number].update({column_val: rid_list})
+                else :
+                    self.indexes[Config.NUM_META_COLS + column_number].update({column_val: [rid]})
 
 
     """

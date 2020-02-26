@@ -66,7 +66,15 @@ class Table:
                     self.key_directory = {int(k):v for k,v in key_data.items()}
                 fp.close()
 
-            self.index.create_index(0)
+            pri_key_file = os.getcwd() + '/pri_index.json'
+            if not os.path.exists(pri_key_file):
+                file = open(pri_key_file, 'w+')
+                file.close()
+            else:
+                with open(pri_key_file, 'rb') as fp:
+                    pri_key_data = json.loads(fp.read())
+                    self.index.indexes[Config.NUM_META_COLS+self.key] = {int(k):v for k,v in pri_key_data.items()}
+                fp.close()
 
         # Background thread stuff
         self.interval = Config.MERGE_INTERVAL
@@ -95,6 +103,10 @@ class Table:
 
         with open(os.getcwd()+'/keydir.json', "w") as fp:
             json.dump(self.key_directory, fp)
+        fp.close()
+
+        with open(os.getcwd()+'/pri_index.json', 'w') as fp:
+            json.dump(self.index.indexes[Config.NUM_META_COLS+self.key], fp)
         fp.close()
 
     # validate and assigns rid

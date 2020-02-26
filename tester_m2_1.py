@@ -4,8 +4,8 @@ from lstore.query import Query
 from random import choice, randint, sample, seed
 
 db = Database()
-db.open("/Users/brandonjon/Documents/ecs160/ECS165A-DBDeadbodies/data")
-#db.open('~/ECS165A')
+#db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/")
+db.open('~/ECS165A')
 # Student Id and 4 grades
 grades_table = db.create_table('Grades', 5, 0)
 query = Query(grades_table)
@@ -18,7 +18,6 @@ for i in range(0, 1000):
     query.insert(*records[key])
 keys = sorted(list(records.keys()))
 print("Insert finished")
-db.tables['Grades'].index.create_index(0)
 
 for key in keys:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
