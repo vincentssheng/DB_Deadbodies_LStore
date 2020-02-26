@@ -4,7 +4,7 @@ from lstore.query import Query
 from random import choice, randint, sample, seed
 
 db = Database()
-db.open("/Users/vsiow/Documents/UCD/W2020/ECS165/ECS165A-DBDeadbodies/data")
+db.open("/Users/brandonjon/Documents/ecs160/ECS165A-DBDeadbodies/data")
 #db.open('~/ECS165A')
 # Student Id and 4 grades
 grades_table = db.create_table('Grades', 5, 0)
@@ -48,8 +48,8 @@ for _ in range(10):
                     error = True
             if error:
                 print('update error on', original, 'and', updated_columns, ':', record.columns, ', correct:', records[key])
-            else:
-                print('update on', original, 'and', updated_columns, ':', record.columns)
+            #else:
+                #print('update on', original, 'and', updated_columns, ':', record.columns)
             updated_columns[i] = None
 print("Update finished")
 

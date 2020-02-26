@@ -61,7 +61,9 @@ class Bufferpool:
             file.write(data_str)
             file.close()  
 
-    def find_page(self, table, r, bt, s, pg):
+    def find_page(self, table, r, bt, s, pg): 
+        if bt == 0 and pg == 0:
+            s = 0
         if not self.pool.__contains__((table, r, bt, s, pg)):
             if len(self.pool) == Config.POOL_MAX_LEN:
                 self.evict()
@@ -73,7 +75,7 @@ class Bufferpool:
             page = self.retrieve(path, (table, r, bt, s, pg))
             return page
 
-        else: # bring page to the most recent slot
+        else: #bring page to the most recent slot
             page = self.pool[(table, r, bt, s, pg)]
             self.queue_lock.acquire()
             self.pool.pop((table, r, bt, s, pg))

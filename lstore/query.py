@@ -157,14 +157,13 @@ class Query:
 
     def get_latest_val(self, page_range, set_num, offset, column_index):
         # checking if base page has been updated
+        #set_num = 0
         latest_rid_page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, Config.INDIRECTION_COLUMN)
         latest_rid_page.pin_count += 1
         latest_rid = int.from_bytes(latest_rid_page.read(offset), sys.byteorder)
         latest_rid_page.pin_count -= 1
-
         if latest_rid > latest_rid_page.lineage:
             latest_rid = 0 # read from base page if bp lineage is newer
-
         if latest_rid == 0:
             # read bp
             page = self.table.bufferpool.find_page(self.table.name, page_range, 0, set_num, column_index+Config.NUM_META_COLS)    
@@ -179,7 +178,7 @@ class Query:
 
     def select(self, key, column, query_columns):
         # need to make sure key is available
-        if column == 0:
+        if column != 0:
             if key not in self.table.key_directory.keys():
                 # error, cannot find a key that does NOT exist
                 return None

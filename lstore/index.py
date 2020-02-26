@@ -103,8 +103,6 @@ class Index:
                 self.indexes[Config.NUM_META_COLS + column_number].update({column_val: rid_list})
             else :
                 self.indexes[Config.NUM_META_COLS + column_number].update({column_val: [rid]})
-        #print(self.indexes[Config.NUM_META_COLS + column_number])
-        pass
 
 
     """
@@ -114,5 +112,4 @@ class Index:
     def drop_index(self, column_number):
         if (self.indexes[Config.NUM_META_COLS + column_number]) : 
             self.indexes[Config.NUM_META_COLS + column_number].clear()
-        pass
 
