@@ -66,26 +66,7 @@ class Table:
                     self.key_directory = {int(k):v for k,v in key_data.items()}
                 fp.close()
 
-        if method == 'get':
-            pgdir_file = os.getcwd() + "/pgdir.json"
-            if not os.path.exists(pgdir_file):
-                file = open(pgdir_file, "w+")
-                file.close()
-            else:
-                with open(pgdir_file, "rb") as fp:
-                    pgdir_data = json.loads(fp.read())
-                    self.page_directory = {int(k):v for k,v in pgdir_data.items()}
-                fp.close()
-            
-            keydir_file = os.getcwd() + "/keydir.json"
-            if not os.path.exists(keydir_file):
-                file = open(keydir_file, "w+")
-                file.close()
-            else:
-                with open(keydir_file, "rb") as fp:
-                    key_data = json.loads(fp.read())
-                    self.key_directory = {int(k):v for k,v in key_data.items()}
-                fp.close()
+            self.index.create_index(0)
 
         # Background thread stuff
         self.interval = Config.MERGE_INTERVAL
@@ -267,13 +248,13 @@ class Table:
 
                 # Swap consolidated page into page directory
                 self.pd_lock.acquire()
-                print("acquired lock")
+                
                 for i in range(consolidated_bp[0].num_records):
                     rid = int.from_bytes(consolidated_bp[0].read(i), sys.byteorder)
                     self.page_directory[rid] = (index, 0, self.base_tracker[index], i)
                     self.key_directory[rid] = (index, self.base_tracker[index], i)
                 self.pd_lock.release()
-                print("released lock")
+                
 
             time.sleep(self.interval)
  
