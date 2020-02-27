@@ -233,7 +233,7 @@ class Query:
             rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
             rid_page.pin_count -= 1
 
-            record_list.append(Record(rid, key, tuple(record_info)))
+            record_list.append(Record(rid, key, record_info))
         
         return record_list
 
