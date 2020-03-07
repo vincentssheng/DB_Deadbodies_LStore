@@ -13,7 +13,6 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        pass
    
     """
     # Conversion of schema encoding to integer
@@ -77,23 +76,50 @@ class Query:
     # Delete record with the specified key
     # @param: key - specified primary key
     
-    def delete(self, key): # invalidate RID of base record and all tail records
+    def delete(self, key, commit=False, abort=False, t=None, *args): # invalidate RID of base record and all tail records
+
+        # committing to database
+        if commit:
+            transaction = args[0]
+            self.table.lock.release(transaction)
+            return (Config.INVALID_RID, 0, True)
+
+        # undoing previous writes
+        if abort:
+            rid = args[0]
+            key = args[1]
+            (range_index, base, set_index, offset) = self.table.calculate_base_location(rid)
+
+            rid_page = self.table.bufferpool.find_page(self.table.name, range_index, base, set_index, Config.RID_COLUMN)
+            rid_page.write(offset, rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+            self.table.pd_lock.acquire()
+            self.table.page_directory[rid] = (range_index, base, set_index, offset)
+            self.table.index.indexes[Config.NUM_META_COLS+self.table.key][key] = [rid]
+            self.table.pd_lock.release()
+
+            return (Config.INVALID_RID, 0, True)
 
         # Get location in read info from base record
-        (range_index, set_index, offset) = self.table.key_directory[key]
-        ind_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
-        indirection = int.from_bytes(ind_page.read(offset), sys.byteorder)
+        rids = self.table.index.locate(0, key)
+        (range_index, _, set_index, offset) = self.table.page_directory[rids[0]]
+
+        if not self.table.lock.acquire(rids[0], t, 'X'):
+            return (Config.INVALID_RID, 0, False)
+
+        #ind_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
+        #indirection = int.from_bytes(ind_page.read(offset), sys.byteorder)
         rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN) 
         base_rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
-        del self.table.key_directory[key]
         del self.table.page_directory[base_rid]
         del self.table.index.indexes[Config.NUM_META_COLS + self.table.key][key]
 
         # delete base record
         rid_page.write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
+        """
         # Track down tail records associated to the base record that is deleted
         while indirection > 0:
             # Find next indirection
@@ -106,15 +132,38 @@ class Query:
 
             # invalidate record
             rid_page = self.table.bufferpool.find_page(self.table.name, next_range, 1, next_set, Config.RID_COLUMN) 
+            rid = rid_page.read(next_offset)
             rid_page.write(next_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder)) 
-
-     
+        """
+        return (base_rid, key, True)     
 
     # Insert into a database
     # @param: *columns - columns to be written
     
     # Insert a record with specified columns
-    def insert(self, *columns):
+    def insert(self, t=None, *columns, commit=False, abort=False):
+
+        # committing to database
+        if commit:
+            transaction = columns[0]
+            self.table.lock.release(transaction)
+            return (Config.INVALID_RID, 0, True)
+
+        # undoing writes
+        if abort:
+            rid = columns[0]
+            key = columns[1]
+            (range_index, base, set_index, offset) = self.table.calculate_base_location(rid)
+            rid_page = self.table.bufferpool.find_page(self.table.name, range_index, base, set_index, Config.RID_COLUMN)
+            rid_page.write(offset, rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+            self.table.pd_lock.acquire()
+            del self.table.page_directory[rid]
+            del self.table.index.indexes[Config.NUM_META_COLS + self.table.key][key]
+            self.table.pd_lock.release()
+
+            return (Config.INVALID_RID, 0, True)
+
 
         # generate schema encoding
         schema_encoding = '0' * self.table.num_columns
@@ -123,9 +172,11 @@ class Query:
         record = Record(self.table.base_current_rid, self.table.key, columns)
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
+        if not self.table.lock.acquire(record.rid, t, 'X'):
+            return (Config.INVALID_RID, 0, False)
+
         # store physical location in page directory
         self.table.page_directory.update({record.rid: (range_index, 0, set_index, offset)}) 
-        self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)})
         self.table.index.indexes[Config.NUM_META_COLS + self.table.key].update({record.columns[self.table.key]: [record.rid]})
 
         # Create new range?
@@ -151,6 +202,7 @@ class Query:
                 file.close()
 
         self.write_to_page(range_index, base, set_index, offset, Config.INVALID_RID, self.schema_to_int(schema_encoding), record.rid, record) # writing to page
+        return (record.rid, record.columns[self.table.key], True)
 
     # Select records from database
     # @param: key - specified key to select record
@@ -178,33 +230,17 @@ class Query:
         return int.from_bytes(page.read(offset), sys.byteorder)
 
 
-    def select(self, key, column, query_columns):
+    def select(self, key, column, query_columns, t=None, commit=False, abort=False, *args):
         # need to make sure key is available
-        """
-        #use key directory (Milestone 1)
-        if key not in self.table.key_directory.keys():
-            # error, cannot find a key that does NOT exist
-            return None
-
-        # find base record physical location
-        (range_index, set_index, offset) = self.table.key_directory[key]
-
-        record_info = []
-
-        for i in range(len(query_columns)):
-            if query_columns[i] == 1:
-                record_info.append(self.get_latest_val(range_index, set_index, offset, i))
-            else:
-                record_info.append('None')
-        
-        rid_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
-        rid_page.pin_count += 1
-        rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
-        rid_page.pin_count -= 1
-        return [Record(rid, key, tuple(record_info))]
-        """
-
         # Milestone 2 index
+        if commit:
+            transaction = args[0]
+            self.table.lock.release(transaction)
+            return ([], True)
+
+        if abort:
+            return([], True)
+
         record_list = []
         # find base record physical location
         rids = self.table.index.locate(column, key)
@@ -212,7 +248,11 @@ class Query:
         if (rids == None):
             print(self.table.index.indexes[Config.NUM_META_COLS+self.table.key])
             return None  # or None?
-        
+
+        for rid in rids:
+            if not self.table.lock.acquire(rid, t, 'S'):
+                return ([], False)
+
         for rid in rids:
             record_info = []
             (range_index, _, set_index, offset) = self.table.page_directory[rid]
@@ -235,19 +275,51 @@ class Query:
 
             record_list.append(Record(rid, key, record_info))
         
-        return record_list
+        return (record_list, True)
 
         
     # Update a record with specified key and columns
     # @param: key - specified key that corresponds to a record which we want to update
     # @param: *columns - in the form of [1, 2, none, none, 4]
     
-    def update(self, key, *columns):
+    def update(self, key, t=None, *columns, commit=False, abort=False):
+
+        if commit:
+            transaction = columns[0]
+            self.table.lock.release(transaction)
+            return (Config.INVALID_RID, True)
+
+        if abort:
+            base_rid = columns[0]
+            (range_index, base, set_index, offset) = self.table.calculate_base_location(base_rid)
+            base_ind_page = self.table.bufferpool.find_page(self.table.name, range_index, base, set_index, Config.INDIRECTION_COLUMN)
+            base_ind = base_ind_page.read(offset)
+
+            self.table.pd_lock.acquire()
+            (tail_range, tail, tail_set, tail_offset) = self.table.page_directory[base_ind]
+            self.table.pd_lock.release()
+            tail_rid_page = self.table.bufferpool.find_page(self.table.name, tail_range, tail, tail_set, Config.RID_COLUMN)
+            tail_rid_page.write(tail_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+            tail_ind_page = self.table.bufferpool.find_page(self.table.name, tail_range, tail, tail_set, Config.INDIRECTION_COLUMN)
+            new_tail_rid = tail_ind_page.read(tail_offset)
+            base_ind_page.write(offset, new_tail_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+            self.table.pd_lock.acquire()
+            del self.table.page_directory[base_ind]
+            self.table.pd_lock.release()
+
+            return (Config.INVALID_RID, True)
 
         # find RID for tail record
         self.table.assign_rid('update')
         record = Record(self.table.tail_current_rid, self.table.key, columns)
-        (base_range, base_set, base_offset) = self.table.key_directory[key]
+        rids = self.table.index.locate(0, key)
+
+        if not self.table.lock.acquire(rids[0], t, 'S'):
+            return (Config.INVALID_RID, False)
+
+        (base_range, _, base_set, base_offset) = self.table.page_directory[rids[0]]
         # generate schema encoding
         new_schema = ""
         for i in range(self.table.num_columns):
@@ -344,6 +416,7 @@ class Query:
             rid_page.pin_count -= 1
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
+        return (base_rid, True)
 
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -351,8 +424,16 @@ class Query:
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
     
-    def sum(self, start_range, end_range, aggregate_column_index):
+    def sum(self, start_range, end_range, aggregate_column_index, *args, t=None, commit=False, abort=False):
         # need to make sure key is availabl
+
+        if commit:
+            transaction = args[0]
+            self.table.lock.release(transaction)
+            return (-1, True)
+
+        if abort:
+            return (-1, True)
 
         while start_range not in self.table.key_directory.keys():
             start_range += 1
@@ -360,7 +441,13 @@ class Query:
         while end_range not in self.table.key_directory.keys():
             end_range -= 1
 
-        (range_index, set_index, offset) = self.table.key_directory[start_range]
+        rids = self.table.index.locate_range(start_range, end_range, 0)
+
+        for rid in rids:
+            if not self.table.lock.acquire(rid, t, 'S'):
+                return (-1, False)
+
+        (range_index, _, set_index, offset) = self.table.page_directory[start_range]
         sum = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
 
         while (start_range != end_range):
@@ -375,4 +462,21 @@ class Query:
 
             sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
     
-        return sum
+        return (sum, True)
+
+    """
+    incremenets one column of the record
+    this implementation should work if your select and update queries already work
+    :param key: the primary of key of the record to increment
+    :param column: the column to increment
+    # Returns True is increment is successful
+    # Returns False if no record matches key or if target record is locked by 2PL.
+    """
+    def increment(self, key, column):
+        r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
+        if r is not False:
+            updated_columns = [None] * self.table.num_columns
+            updated_columns[column] = r[column] + 1
+            u = self.update(key, *updated_columns)
+            return u[-1]
+        return False

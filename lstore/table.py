@@ -12,6 +12,37 @@ class Record:
         self.key = key
         self.columns = columns
 
+class LockManager:
+
+    def __init__(self):
+        self.manager = {}
+
+    def acquire(self, rid, transaction, lock_type):
+        if rid not in self.manager:
+            self.manager[rid] = {}
+
+        if len(self.manager[rid]) == 0:
+            self.manager[rid].update({transaction: lock_type})
+        elif len(self.manager[rid]) == 1:
+            (t, l) = self.manager[rid].items(0)
+            if lock_type == 'S' and l == 'S':
+                if transaction != t:
+                    self.manager[rid].update({transaction: lock_type})
+            else:
+                return False
+        else:
+            if lock_type == 'X':
+                return False
+            else:
+                if transaction not in self.manager[rid]:
+                    self.manager[rid].update({transaction: lock_type})
+        return False
+
+    def release(self, transaction):
+        for (_, locks) in self.manager.items():
+            if transaction in locks:
+                del locks[transaction]
+
 class Table:
 
     """
@@ -39,6 +70,7 @@ class Table:
         self.base_tracker = base_tracker
         self.pd_lock = threading.Lock()
         self.verbose = verbose
+        self.lock = LockManager()
 
         if method == 'create':
             if not os.path.exists(os.getcwd() + "/" + name):
