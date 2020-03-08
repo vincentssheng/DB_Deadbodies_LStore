@@ -4,6 +4,7 @@ import os, json, threading, time
 from lstore.page import *
 from collections import defaultdict
 from datetime import datetime
+import itertools
 
 class Record:
 
@@ -17,31 +18,42 @@ class LockManager:
     def __init__(self):
         self.manager = {}
 
-    def acquire(self, rid, transaction, lock_type):
-        if rid not in self.manager:
+    def acquire(self, rid, thread_id, lock_type):
+        if rid not in self.manager.keys():
             self.manager[rid] = {}
 
-        if len(self.manager[rid]) == 0:
-            self.manager[rid].update({transaction: lock_type})
-        elif len(self.manager[rid]) == 1:
-            (t, l) = self.manager[rid].items(0)
-            if lock_type == 'S' and l == 'S':
-                if transaction != t:
-                    self.manager[rid].update({transaction: lock_type})
-            else:
-                return False
+        
+        if lock_type == 'S':
+            for (tid, l) in self.manager[rid].items():
+                if tid != thread_id:
+                    if l >= 2:
+                        #print(str(thread_id) + ", " + str(rid) + ", " + lock_type + " denied")
+                        return False
+            
+            if thread_id not in self.manager[rid].keys():
+                self.manager[rid][thread_id] = 1
+            #print(str(thread_id) + ", " + str(rid) + ", " + lock_type + " granted")
         else:
-            if lock_type == 'X':
-                return False
+            for (tid, l) in self.manager[rid].items():
+                if tid != thread_id:
+                    if l >= 1:
+                        #print(str(thread_id) + ", " + str(rid) + ", " + lock_type + " denied")
+                        return False
+            if thread_id not in self.manager[rid].keys():
+                #print(str(thread_id) + ", " + str(rid) + ", " + lock_type + " granted")
+                self.manager[rid][thread_id] = 2
             else:
-                if transaction not in self.manager[rid]:
-                    self.manager[rid].update({transaction: lock_type})
-        return False
+                if self.manager[rid][thread_id] == 1:
+                    #print(str(thread_id) + ", " + str(rid) + ", " + lock_type + "-> X")
+                    self.manager[rid][thread_id] = 2
 
-    def release(self, transaction):
+        return True
+
+    def release(self, thread_id):
         for (_, locks) in self.manager.items():
-            if transaction in locks:
-                del locks[transaction]
+            if thread_id in locks.keys():
+                #print("releasing locks")
+                del locks[thread_id]
 
 class Table:
 
@@ -71,6 +83,7 @@ class Table:
         self.pd_lock = threading.Lock()
         self.verbose = verbose
         self.lock = LockManager()
+        self.lm_lock = threading.Lock()
 
         if method == 'create':
             if not os.path.exists(os.getcwd() + "/" + name):

@@ -75,7 +75,8 @@ class Bufferpool:
     def find_page(self, table, r, bt, s, pg): 
         if bt == 0 and pg == 0:
             s = 0
-        if not self.pool.__contains__((table, r, bt, s, pg)):
+        #print(table, r, bt, s, pg)
+        if (table, r, bt, s, pg) not in self.pool.keys():
             if len(self.pool) == Config.POOL_MAX_LEN:
                 self.evict()
             path = os.getcwd() + '/r_' + str(r) + '/' + str(bt) 

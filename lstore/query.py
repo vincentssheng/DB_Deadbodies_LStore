@@ -80,8 +80,9 @@ class Query:
 
         # committing to database
         if commit:
-            transaction = args[0]
-            self.table.lock.release(transaction)
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
             return (Config.INVALID_RID, 0, True)
 
         # undoing previous writes
@@ -101,11 +102,18 @@ class Query:
             return (Config.INVALID_RID, 0, True)
 
         # Get location in read info from base record
+        self.table.pd_lock.acquire()
         rids = self.table.index.locate(0, key)
         (range_index, _, set_index, offset) = self.table.page_directory[rids[0]]
+        self.table.pd_lock.release()
 
-        if not self.table.lock.acquire(rids[0], t, 'X'):
-            return (Config.INVALID_RID, 0, False)
+        if t:
+            self.table.lm_lock.acquire()
+            if not self.table.lock.acquire(rids[0], t, 'X'):
+                self.table.lm_lock.release()
+                return (Config.INVALID_RID, 0, False)
+
+            self.table.lm_lock.release()
 
         #ind_page = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.INDIRECTION_COLUMN) 
         #indirection = int.from_bytes(ind_page.read(offset), sys.byteorder)
@@ -147,8 +155,9 @@ class Query:
     def insert(self, *columns, commit=False, abort=False, t=None):
         # committing to database
         if commit:
-            transaction = columns[0]
-            self.table.lock.release(transaction)
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
             return (Config.INVALID_RID, 0, True)
 
         # undoing writes
@@ -174,8 +183,12 @@ class Query:
         record = Record(self.table.base_current_rid, self.table.key, columns)
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
-        if not self.table.lock.acquire(record.rid, t, 'X'):
-            return (Config.INVALID_RID, 0, False)
+        if t:
+            self.table.lm_lock.acquire()
+            if not self.table.lock.acquire(record.rid, t, 'X'):
+                self.table.lm_lock.release()
+                return (Config.INVALID_RID, 0, False)
+            self.table.lm_lock.release()
 
         # store physical location in page directory
         self.table.pd_lock.acquire()
@@ -229,7 +242,9 @@ class Query:
         else:
             # read the tail record
             # use page directory to get physical location of latest tp
+            self.table.pd_lock.acquire()
             (range_index, _, set_index, offset) = self.table.page_directory[latest_rid]
+            self.table.pd_lock.release()
             page = self.table.bufferpool.find_page(self.table.name, range_index, 1, set_index, column_index+Config.NUM_META_COLS)
 
         return int.from_bytes(page.read(offset), sys.byteorder)
@@ -239,8 +254,9 @@ class Query:
         # need to make sure key is available
         # Milestone 2 index
         if commit:
-            transaction = args[0]
-            self.table.lock.release(transaction)
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
             return ([], True)
 
         if abort:
@@ -251,16 +267,21 @@ class Query:
         rids = self.table.index.locate(column, key)
         
         if (rids == None):
-            print(self.table.index.indexes[Config.NUM_META_COLS+self.table.key])
             return None  # or None?
 
-        for rid in rids:
-            if not self.table.lock.acquire(rid, t, 'S'):
-                return ([], False)
+        if t:
+            self.table.lm_lock.acquire()
+            for rid in rids:
+                if not self.table.lock.acquire(rid, t, 'S'):
+                    self.table.lm_lock.release()
+                    return ([], False)
+            self.table.lm_lock.release()
 
         for rid in rids:
             record_info = []
+            self.table.pd_lock.acquire()
             (range_index, _, set_index, offset) = self.table.page_directory[rid]
+            self.table.pd_lock.release()
 
             for j in range(len(query_columns)):
                 if query_columns[j] == 1:
@@ -279,7 +300,6 @@ class Query:
             rid_page.pin_count -= 1
 
             record_list.append(Record(rid, key, record_info))
-        
         return (record_list, True)
 
         
@@ -290,15 +310,16 @@ class Query:
     def update(self, key, *columns, commit=False, abort=False, t=None):
 
         if commit:
-            transaction = columns[0]
-            self.table.lock.release(transaction)
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
             return (Config.INVALID_RID, True)
 
         if abort:
-            base_rid = columns[0]
+            base_rid = columns[0][0]
             (range_index, base, set_index, offset) = self.table.calculate_base_location(base_rid)
             base_ind_page = self.table.bufferpool.find_page(self.table.name, range_index, base, set_index, Config.INDIRECTION_COLUMN)
-            base_ind = base_ind_page.read(offset)
+            base_ind = int.from_bytes(base_ind_page.read(offset), sys.byteorder)
 
             self.table.pd_lock.acquire()
             (tail_range, tail, tail_set, tail_offset) = self.table.page_directory[base_ind]
@@ -307,8 +328,7 @@ class Query:
             tail_rid_page.write(tail_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
 
             tail_ind_page = self.table.bufferpool.find_page(self.table.name, tail_range, tail, tail_set, Config.INDIRECTION_COLUMN)
-            new_tail_rid = tail_ind_page.read(tail_offset)
-            base_ind_page.write(offset, new_tail_rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+            base_ind_page.write(offset, tail_ind_page.read(tail_offset))
 
             self.table.pd_lock.acquire()
             del self.table.page_directory[base_ind]
@@ -321,10 +341,16 @@ class Query:
         record = Record(self.table.tail_current_rid, self.table.key, columns)
         rids = self.table.index.locate(0, key)
 
-        if not self.table.lock.acquire(rids[0], t, 'S'):
-            return (Config.INVALID_RID, False)
-
+        if t:
+            self.table.lm_lock.acquire()
+            if not self.table.lock.acquire(rids[0], t, 'X'):
+                self.table.lm_lock.release()
+                return (Config.INVALID_RID, False)
+            self.table.lm_lock.release()
+        
+        self.table.pd_lock.acquire()
         (base_range, _, base_set, base_offset) = self.table.page_directory[rids[0]]
+        self.table.pd_lock.release()
         # generate schema encoding
         new_schema = ""
         for i in range(self.table.num_columns):
@@ -350,7 +376,7 @@ class Query:
         base_ind = int.from_bytes(base_ind_page.read(base_offset), sys.byteorder)
         base_ind_page.write(base_offset, record.rid.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
         base_ind_page.pin_count -= 1
-
+       
         # Base SE (3)
         base_SE_page = self.table.bufferpool.find_page(self.table.name, base_range, 0, base_set, Config.SCHEMA_ENCODING_COLUMN)
         base_SE_page.pin_count += 1
@@ -365,16 +391,19 @@ class Query:
                 result_schema += '0'
         base_SE_page.write(base_offset, self.schema_to_int(result_schema).to_bytes(Config.ENTRY_SIZE, sys.byteorder))
         base_SE_page.pin_count -= 1
-
+        
         # Get information from latest updated record
         non_updated_values = []
         if base_ind != 0: # if base record has been updated at least once
+            self.table.pd_lock.acquire()
             (prev_range, prev_bt, prev_set, prev_offset) = self.table.page_directory[base_ind]  
+            self.table.pd_lock.release()
         else: # if base record has not been updated
             prev_range = base_range
             prev_bt = 0
             prev_set = base_set
             prev_offset = base_offset
+        
         for i in range(self.table.num_columns):
             if new_schema[i] == '0':
                 page = self.table.bufferpool.find_page(self.table.name, prev_range, prev_bt, prev_set, i+Config.NUM_META_COLS)
@@ -391,7 +420,7 @@ class Query:
             else:
                 new_columns.append(columns[i])
         record.columns = tuple(new_columns)
-
+        
         # write tail record to memory
         if tail_index == -1: # no tail page created yet
             path = os.getcwd() + "/r_" + str(base_range) + "/1" + "/s_0"
@@ -419,7 +448,10 @@ class Query:
                     file.close()
 
             rid_page.pin_count -= 1
+        
+        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
+        self.table.pd_lock.release()
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
         return (base_rid, True)
 
@@ -433,8 +465,9 @@ class Query:
         # need to make sure key is availabl
 
         if commit:
-            transaction = args[0]
-            self.table.lock.release(transaction)
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
             return (-1, True)
 
         if abort:
@@ -451,8 +484,12 @@ class Query:
         self.table.pd_lock.release()
         rid = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
 
-        if not self.table.lock.acquire(rid, t, 'S'):
-            return (-1, False)
+        if t:
+            self.table.lm_lock.acquire()
+            if not self.table.lock.acquire(rid, t, 'S'):
+                self.table.lm_lock.release()
+                return (-1, False)
+            self.table.lm_lock.release()
 
         total = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
 
@@ -466,8 +503,12 @@ class Query:
             self.table.pd_lock.release()
             rid = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
 
-            if not self.table.lock.acquire(rid, t, 'S'):
-                return (-1, False)
+            if t:
+                self.table.lm_lock.acquire()
+                if not self.table.lock.acquire(rid, t, 'S'):
+                    self.table.lm_lock.release()
+                    return (-1, False)
+                self.table.lm_lock.acquire()
 
             total += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
             
