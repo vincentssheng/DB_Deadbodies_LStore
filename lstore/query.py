@@ -113,8 +113,11 @@ class Query:
         base_rid = int.from_bytes(rid_page.read(offset), sys.byteorder)
 
         # remove key and rid from dictionaries
+        self.table.pd_lock.acquire()
         del self.table.page_directory[base_rid]
         del self.table.index.indexes[Config.NUM_META_COLS + self.table.key][key]
+        del self.table.key_directory[key]
+        self.table.pd_lock.release()
 
         # delete base record
         rid_page.write(offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
@@ -141,8 +144,7 @@ class Query:
     # @param: *columns - columns to be written
     
     # Insert a record with specified columns
-    def insert(self, t=None, *columns, commit=False, abort=False):
-
+    def insert(self, *columns, commit=False, abort=False, t=None):
         # committing to database
         if commit:
             transaction = columns[0]
@@ -160,10 +162,10 @@ class Query:
             self.table.pd_lock.acquire()
             del self.table.page_directory[rid]
             del self.table.index.indexes[Config.NUM_META_COLS + self.table.key][key]
+            del self.table.key_directory[key]
             self.table.pd_lock.release()
 
             return (Config.INVALID_RID, 0, True)
-
 
         # generate schema encoding
         schema_encoding = '0' * self.table.num_columns
@@ -176,8 +178,11 @@ class Query:
             return (Config.INVALID_RID, 0, False)
 
         # store physical location in page directory
+        self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (range_index, 0, set_index, offset)}) 
         self.table.index.indexes[Config.NUM_META_COLS + self.table.key].update({record.columns[self.table.key]: [record.rid]})
+        self.table.key_directory.update({record.columns[self.table.key]: (range_index, set_index, offset)}) 
+        self.table.pd_lock.release()
 
         # Create new range?
         if range_index > self.table.latest_range_index:
@@ -282,7 +287,7 @@ class Query:
     # @param: key - specified key that corresponds to a record which we want to update
     # @param: *columns - in the form of [1, 2, none, none, 4]
     
-    def update(self, key, t=None, *columns, commit=False, abort=False):
+    def update(self, key, *columns, commit=False, abort=False, t=None):
 
         if commit:
             transaction = columns[0]
@@ -441,28 +446,33 @@ class Query:
         while end_range not in self.table.key_directory.keys():
             end_range -= 1
 
-        rids = self.table.index.locate_range(start_range, end_range, 0)
+        self.table.pd_lock.acquire()
+        (range_index, set_index, offset) = self.table.key_directory[start_range]
+        self.table.pd_lock.release()
+        rid = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
 
-        for rid in rids:
+        if not self.table.lock.acquire(rid, t, 'S'):
+            return (-1, False)
+
+        total = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
+
+        while start_range != end_range:
+            start_range += 1
+            if start_range not in self.table.key_directory.keys():
+                continue
+
+            self.table.pd_lock.acquire()
+            (range_index, set_index, offset) = self.table.key_directory[start_range]
+            self.table.pd_lock.release()
+            rid = self.table.bufferpool.find_page(self.table.name, range_index, 0, set_index, Config.RID_COLUMN)
+
             if not self.table.lock.acquire(rid, t, 'S'):
                 return (-1, False)
 
-        (range_index, _, set_index, offset) = self.table.page_directory[start_range]
-        sum = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
-
-        while (start_range != end_range):
-            start_range += 1
-
-            # check if new key exists in dictionary
-            if (start_range not in self.table.key_directory.keys()):
-                continue
+            total += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
             
-            # get physical location
-            (range_index, set_index, offset) = self.table.key_directory[start_range]
 
-            sum += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)
-    
-        return (sum, True)
+        return (total, True)
 
     """
     incremenets one column of the record

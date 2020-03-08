@@ -48,6 +48,7 @@ class Transaction:
             elif query.__name__ == 'delete':
                 query(0, ret_val, abort=True)
             
+        self.commit() # remove all locks
         return False
 
     def commit(self):

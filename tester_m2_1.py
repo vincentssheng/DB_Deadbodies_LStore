@@ -20,7 +20,8 @@ keys = sorted(list(records.keys()))
 print("Insert finished")
 
 for key in keys:
-    record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
+    result = query.select(key, 0, [1, 1, 1, 1, 1])[0]
+    record = result[0]
     error = False
     for i, column in enumerate(record.columns):
         if column != records[key][i]:
@@ -40,7 +41,8 @@ for _ in range(10):
             original = records[key].copy()
             records[key][i] = value
             query.update(key, *updated_columns)
-            record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
+            result = query.select(key, 0, [1, 1, 1, 1, 1])[0]
+            record = result[0]
             error = False
             for j, column in enumerate(record.columns):
                 if column != records[key][j]:
@@ -55,7 +57,7 @@ print("Update finished")
 for i in range(0, 100):
     r = sorted(sample(range(0, len(keys)), 2))
     column_sum = sum(map(lambda key: records[key][0], keys[r[0]: r[1] + 1]))
-    result = query.sum(keys[r[0]], keys[r[1]], 0)
+    result = query.sum(keys[r[0]], keys[r[1]], 0)[0]
     if column_sum != result:
         print('sum error on [', keys[r[0]], ',', keys[r[1]], ']: ', result, ', correct: ', column_sum)
     #else:

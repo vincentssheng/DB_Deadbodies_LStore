@@ -31,7 +31,7 @@ class Index:
         # self.update(column)
         
         if (not self.indexes[Config.NUM_META_COLS + column].__contains__(value)) :
-            return None
+            return []
 
         rids = self.indexes[Config.NUM_META_COLS + column].get(value)
         

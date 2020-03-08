@@ -44,7 +44,7 @@ for i in range(10000):
 
 threads = []
 for transaction_worker in transaction_workers:
-    threads.append(threading.Thread(transaction_worker.run, args = ()))
+    threads.append(threading.Thread(target=transaction_worker.run, args = ()))
 
 for thread in threads:
     thread.start()
