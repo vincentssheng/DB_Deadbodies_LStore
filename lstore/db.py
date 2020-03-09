@@ -94,9 +94,6 @@ class Bufferpool:
             self.pool[(table, r, bt, s, pg)] = page
             return page
             
-
-
-
 class Database():
 
     def __init__(self):

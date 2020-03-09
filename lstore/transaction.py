@@ -10,6 +10,7 @@ class Transaction:
     def __init__(self):
         self.queries = []
         self.results = []
+        self.ret_vals = []
 
     """
     # Adds the given query to this transaction
@@ -25,12 +26,14 @@ class Transaction:
     def run(self):
         for query, args in self.queries:
             ret_val = query(t=threading.current_thread().ident, *args)
+            self.ret_vals.append(ret_val[-1])
             self.results.append(ret_val)
             # If the query has failed the transaction should abort
             if ret_val[-1] == False:
                 #print("we have to abort %s, " %(str(threading.current_thread().ident)), self.results)
                 return self.abort()
-        return self.commit()
+        self.commit()
+        return self.ret_vals
 
     def abort(self):
         #TODO: do roll-back and any other necessary operations
