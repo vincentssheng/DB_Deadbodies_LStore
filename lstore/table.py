@@ -84,6 +84,10 @@ class Table:
         self.verbose = verbose
         self.lock = LockManager()
         self.lm_lock = threading.Lock()
+        self.tt_lock = threading.Lock()
+        self.base_rid_lock = threading.Lock()
+        self.tail_rid_lock = threading.Lock()
+
 
         if method == 'create':
             if not os.path.exists(os.getcwd() + "/" + name):
@@ -207,7 +211,9 @@ class Table:
             # if we have not merge this record
             if base_rids[base_rid] == -1:
                 base_rids.update({base_rid: 1})
-                (_, _, _, base_offset) = self.page_directory[base_rid]               
+                self.pd_lock.acquire()
+                (_, _, _, base_offset) = self.page_directory[base_rid]
+                self.pd_lock.release()               
                 for i in range(2, len(tp)): # copy all columns over
                     bp[i+2].write(base_offset, tp[i].read(offset))
 
@@ -235,9 +241,12 @@ class Table:
             for (i, set) in enumerate(self.merge_tracker):
 
                 # Check if there are tail pages available for merging.
+                self.tt_lock.acquire()
                 if set >= self.tail_tracker[i]:
+                    self.tt_lock.release()
                     continue
-
+                
+                self.tt_lock.release()
                 # Check capacity of tail page
                 page = self.bufferpool.find_page(self.name, i, 1, set, Config.RID_COLUMN)
                 if page.has_capacity():
@@ -305,7 +314,6 @@ class Table:
 
                 # Swap consolidated page into page directory
                 self.pd_lock.acquire()
-                
                 for i in range(consolidated_bp[0].num_records):
                     rid = int.from_bytes(consolidated_bp[0].read(i), sys.byteorder)
                     self.page_directory[rid] = (index, 0, self.base_tracker[index], i)

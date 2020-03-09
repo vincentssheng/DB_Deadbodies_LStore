@@ -9,6 +9,7 @@ class Bufferpool:
     def __init__(self, db):
         self.db = db
         self.pool = OrderedDict() # Pages stored in an ordered dictionary to mimic an LRU cache
+        self.lock = threading.Lock()
 
     """
     Called upon db.close()
@@ -61,7 +62,7 @@ class Bufferpool:
         while evict_page.pin_count > 0:
             self.pool[key] = evict_page
             (key, evict_page) = self.pool.popitem()
-            
+    
         if evict_page.dirty:
             file = open(evict_page.path, "w")
             file.write(str(evict_page.lineage)+'\n')
@@ -70,7 +71,7 @@ class Bufferpool:
                 data_str += str(int.from_bytes(evict_page.read(i), sys.byteorder)) + " "
 
             file.write(data_str)
-            file.close()  
+            file.close() 
 
     def find_page(self, table, r, bt, s, pg): 
         if bt == 0 and pg == 0:

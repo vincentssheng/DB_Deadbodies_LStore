@@ -13,16 +13,15 @@ grades_table = db.create_table('Grades', 5, 0)
 keys = []
 records = {}
 seed(3562901)
-num_threads = 2
+num_threads = 8
 
 # Generate random records
-for i in range(0, 1000):
+for i in range(0, 10000):
     key = 92106429 + i
     keys.append(key)
     records[key] = [key, 0, 0, 0, 0]
     q = Query(grades_table)
     q.insert(*records[key])
-print("insertion done")
 
 # Create transactions and assign them to workers
 transactions = []
@@ -30,7 +29,7 @@ transaction_workers = []
 for i in range(num_threads):
     transaction_workers.append(TransactionWorker())
 
-for i in range(100):
+for i in range(1000):
     key = choice(keys)
     record = records[key]
     c = record[1]

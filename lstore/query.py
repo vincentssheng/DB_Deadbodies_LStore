@@ -179,8 +179,12 @@ class Query:
         # generate schema encoding
         schema_encoding = '0' * self.table.num_columns
 
+        self.table.base_rid_lock.acquire()
+        self.table.tail_rid_lock.acquire()
         self.table.assign_rid('insert') # get valid rid
         record = Record(self.table.base_current_rid, self.table.key, columns)
+        self.table.tail_rid_lock.release()
+        self.table.base_rid_lock.release()
         (range_index, base, set_index, offset) = self.table.calculate_base_location(record.rid)
 
         if t:
@@ -199,7 +203,9 @@ class Query:
 
         # Create new range?
         if range_index > self.table.latest_range_index:
+            self.table.tt_lock.acquire()
             self.table.tail_tracker.append(-1)
+            self.table.tt_lock.release()
             self.table.merge_tracker.append(0)
             self.table.base_tracker.append(0)
             self.table.latest_range_index += 1
@@ -337,8 +343,12 @@ class Query:
             return (Config.INVALID_RID, True)
 
         # find RID for tail record
+        self.table.base_rid_lock.acquire()
+        self.table.tail_rid_lock.acquire()
         self.table.assign_rid('update')
         record = Record(self.table.tail_current_rid, self.table.key, columns)
+        self.table.tail_rid_lock.release()
+        self.table.base_rid_lock.release()
         rids = self.table.index.locate(0, key)
 
         if t:
@@ -358,11 +368,6 @@ class Query:
                 new_schema += '0'
             else:
                 new_schema += '1'
-
-        tail_index = self.table.tail_tracker[base_range]
-        path = os.getcwd()+"/r_"+str(base_range)+"/1"
-        if tail_index == -1 and not os.path.exists(path): # if no updates to record yet
-            os.makedirs(path)
 
         # Base RID (1)
         base_rid_page = self.table.bufferpool.find_page(self.table.name, base_range, 0, base_set, Config.RID_COLUMN)
@@ -422,6 +427,12 @@ class Query:
         record.columns = tuple(new_columns)
         
         # write tail record to memory
+        self.table.tt_lock.acquire()
+        tail_index = self.table.tail_tracker[base_range]
+        path = os.getcwd()+"/r_"+str(base_range)+"/1"
+        if tail_index == -1 and not os.path.exists(path): # if no updates to record yet
+            os.makedirs(path)
+
         if tail_index == -1: # no tail page created yet
             path = os.getcwd() + "/r_" + str(base_range) + "/1" + "/s_0"
             if not os.path.exists(path):
@@ -448,11 +459,12 @@ class Query:
                     file.close()
 
             rid_page.pin_count -= 1
-        
+
         self.table.pd_lock.acquire()
         self.table.page_directory.update({record.rid: (base_range, 1, self.table.tail_tracker[base_range], tail_offset)})
         self.table.pd_lock.release()
         self.write_to_page(base_range, 1, self.table.tail_tracker[base_range], tail_offset, base_ind, self.schema_to_int(new_schema), base_rid, record)
+        self.table.tt_lock.release()
         return (base_rid, True)
 
     """
@@ -523,11 +535,12 @@ class Query:
     # Returns True is increment is successful
     # Returns False if no record matches key or if target record is locked by 2PL.
     """
-    def increment(self, key, column):
-        r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
-        if r is not False:
+    def increment(self, key, column, commit=False, abort=False, t=None):
+
+        (r, b) = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
+        if b is not False:
             updated_columns = [None] * self.table.num_columns
             updated_columns[column] = r[column] + 1
-            u = self.update(key, *updated_columns)
-            return u[-1]
-        return False
+            (base_rid, ub) = self.update(key, *updated_columns)
+            return (base_rid, ub)
+        return (base_rid, False)

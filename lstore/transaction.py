@@ -28,15 +28,15 @@ class Transaction:
             self.results.append(ret_val)
             # If the query has failed the transaction should abort
             if ret_val[-1] == False:
-                print("we have to abort %s, " %(str(threading.current_thread().ident)), self.results)
+                #print("we have to abort %s, " %(str(threading.current_thread().ident)), self.results)
                 return self.abort()
         return self.commit()
 
     def abort(self):
         #TODO: do roll-back and any other necessary operations
-        print([self.queries[i][0].__name__ for i in range(len(self.results))])
+        #print([self.queries[i][0].__name__ for i in range(len(self.results))])
         for (i, ret_val) in enumerate(self.results[:-1]):
-            print("Start undoing " + self.queries[i][0].__name__)
+            #print("Start undoing " + self.queries[i][0].__name__)
             query = self.queries[i][0]
             if query.__name__ == 'insert':
                 query(ret_val, abort=True)
@@ -48,7 +48,7 @@ class Transaction:
                 query(0, 0, 0, abort=True)
             elif query.__name__ == 'delete':
                 query(0, ret_val, abort=True)
-            print("Undone " + self.queries[i][0].__name__)    
+            #print("Undone " + self.queries[i][0].__name__)    
         self.commit() # remove all locks
         return False
 
