@@ -48,6 +48,8 @@ class Transaction:
                 query(0, 0, 0, abort=True)
             elif query.__name__ == 'delete':
                 query(0, ret_val, abort=True)
+            elif query.__name__ == 'increment':
+                query(0, 0, ret_val, abort=True)
             #print("Undone " + self.queries[i][0].__name__)    
         self.commit() # remove all locks
         return False
@@ -65,5 +67,7 @@ class Transaction:
             query(0, 0, 0, t=threading.current_thread().ident, commit=True)
         elif query.__name__ == 'delete':
             query(0, t=threading.current_thread().ident, commit=True)
+        elif query.__name__ == 'increment':
+            query(0, 0, commit=True, t=threading.current_thread().ident)
 
         return True

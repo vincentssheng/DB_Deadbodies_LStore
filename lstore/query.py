@@ -2,7 +2,7 @@ from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.config import *
 from lstore.page import *
-import sys, struct, time, os
+import sys, struct, time, os, threading
 from datetime import datetime
 
 class Query:
@@ -535,12 +535,40 @@ class Query:
     # Returns True is increment is successful
     # Returns False if no record matches key or if target record is locked by 2PL.
     """
-    def increment(self, key, column, commit=False, abort=False, t=None):
+    def increment(self, key, column, *args, commit=False, abort=False, t=None):
 
-        (r, b) = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
+        if commit:
+            self.table.lm_lock.acquire()
+            self.table.lock.release(t)
+            self.table.lm_lock.release()
+            return (Config.INVALID_RID, True)
+
+        if abort:
+            base_rid = args[0][0]
+            (range_index, base, set_index, offset) = self.table.calculate_base_location(base_rid)
+            base_ind_page = self.table.bufferpool.find_page(self.table.name, range_index, base, set_index, Config.INDIRECTION_COLUMN)
+            base_ind = int.from_bytes(base_ind_page.read(offset), sys.byteorder)
+
+            self.table.pd_lock.acquire()
+            (tail_range, tail, tail_set, tail_offset) = self.table.page_directory[base_ind]
+            self.table.pd_lock.release()
+            tail_rid_page = self.table.bufferpool.find_page(self.table.name, tail_range, tail, tail_set, Config.RID_COLUMN)
+            tail_rid_page.write(tail_offset, Config.INVALID_RID.to_bytes(Config.ENTRY_SIZE, sys.byteorder))
+
+            tail_ind_page = self.table.bufferpool.find_page(self.table.name, tail_range, tail, tail_set, Config.INDIRECTION_COLUMN)
+            base_ind_page.write(offset, tail_ind_page.read(tail_offset))
+
+            self.table.pd_lock.acquire()
+            del self.table.page_directory[base_ind]
+            self.table.pd_lock.release()
+
+            return (Config.INVALID_RID, True)
+
+        (r, b) = self.select(key, self.table.key, [1] * self.table.num_columns, t=threading.current_thread().ident)
         if b is not False:
             updated_columns = [None] * self.table.num_columns
-            updated_columns[column] = r[column] + 1
-            (base_rid, ub) = self.update(key, *updated_columns)
+            updated_columns[column] = r[0].columns[column] + 1
+            (base_rid, ub) = self.update(key, *updated_columns, t=threading.current_thread().ident)
             return (base_rid, ub)
-        return (base_rid, False)
+
+        return (None, False)
