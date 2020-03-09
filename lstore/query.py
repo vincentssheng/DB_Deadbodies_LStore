@@ -500,7 +500,7 @@ class Query:
             self.table.lm_lock.acquire()
             if not self.table.lock.acquire(rid, t, 'S'):
                 self.table.lm_lock.release()
-                return (-1, False)
+                return False
             self.table.lm_lock.release()
 
         total = self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
@@ -519,13 +519,12 @@ class Query:
                 self.table.lm_lock.acquire()
                 if not self.table.lock.acquire(rid, t, 'S'):
                     self.table.lm_lock.release()
-                    return (-1, False)
+                    return False
                 self.table.lm_lock.acquire()
 
             total += self.get_latest_val(range_index, set_index, offset, aggregate_column_index)  
             
-
-        return (total, True)
+        return total
 
     """
     incremenets one column of the record

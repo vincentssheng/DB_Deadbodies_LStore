@@ -29,7 +29,12 @@ class Transaction:
             self.ret_vals.append(ret_val[-1])
             self.results.append(ret_val)
             # If the query has failed the transaction should abort
-            if ret_val[-1] == False:
+            if type(ret_val) is bool: 
+                if ret_val is False:
+                    return self.abort()
+            elif type(ret_val) is int:
+                continue
+            elif ret_val[-1] == False:
                 #print("we have to abort %s, " %(str(threading.current_thread().ident)), self.results)
                 return self.abort()
         self.commit()

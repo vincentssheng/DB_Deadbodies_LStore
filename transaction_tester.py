@@ -58,7 +58,7 @@ num_committed_transactions = sum(t.result for t in transaction_workers)
 print(num_committed_transactions, 'transaction committed.')
 
 query = Query(grades_table)
-s = query.sum(keys[0], keys[-1], 1)[0]
+s = query.sum(keys[0], keys[-1], 1)
 
 if s != num_committed_transactions * 5:
     print('Expected sum:', num_committed_transactions * 5, ', actual:', s, '. Failed.')
